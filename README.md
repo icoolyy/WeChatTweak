@@ -6,6 +6,19 @@
 
 A command-line tool for tweaking WeChat.
 
+## 本分支兼容修复
+
+`hotfix/wechat-4.1.13-raycast` 提供新版模块选择、全量补丁预检、完整备份恢复和独立 Raycast 诊断扩展。微信 4.1.13 / build 269602 的 arm64 原始字节已在本机匹配；真实防撤回、多开效果尚未验收，**Raycast 联系人搜索与打开聊天仍未完成**。
+
+查看 [安装与恢复步骤](docs/installation.md)、[逐项兼容状态](docs/compatibility.md) 和 [原生验证证据](docs/research/269602-native-compatibility.md)。本分支需使用自身构建产物，下面的官方 Homebrew 命令不会安装本分支改动。
+
+```sh
+make test
+make build
+./dist/wechattweak doctor --json
+./dist/wechattweak patch --dry-run
+```
+
 ## 功能
 
 - 阻止消息撤回
