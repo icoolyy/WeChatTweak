@@ -81,6 +81,13 @@ export default function ManageTweak() {
       <List.Item title="联系人搜索和打开会话" subtitle={healthy ? "可用；搜索微信已加载的缓存" : "暂不可用，请先启动已安装桥接的微信并登录"}
         icon={{ source: healthy ? Icon.CheckCircle : Icon.Info, tintColor: healthy ? Color.Green : Color.Orange }} actions={actions} />
     </List.Section>
+    {health && <List.Section title="尚未开放的增强功能">
+      {!health.capabilities.persistentContacts && <List.Item title="跨重启记录" subtitle="当前仅保存当前会话的置顶与最近联系人；跨账号隔离仍未验收" icon={Icon.Info} actions={actions} />}
+      {!health.capabilities.contactPagination && <List.Item title="联系人分页" subtitle="当前每次搜索最多100条，可缩小关键词范围" icon={Icon.Info} actions={actions} />}
+      {!health.capabilities.fullContacts && <List.Item title="完整联系人范围" subtitle="当前仅搜索微信已加载的缓存" icon={Icon.Info} actions={actions} />}
+      {!health.capabilities.avatars && <List.Item title="真实头像" subtitle="尚未验证本地头像来源，当前显示默认图标" icon={Icon.Info} actions={actions} />}
+      {!health.capabilities.quicklinks && <List.Item title="持久快捷链接" subtitle="账号隔离验证完成前不开放" icon={Icon.Info} actions={actions} />}
+    </List.Section>}
     <List.Section title="操作">
       <List.Item title="只读预检" subtitle="校验版本、补丁字节和桥接安装条件" icon={Icon.MagnifyingGlass} actions={<ActionPanel><Action title="执行只读预检" onAction={() => execute("preflight")} /></ActionPanel>} />
       <List.Item title="安装或更新 WeChatTweak" subtitle="使用本分支 patch --install-bridge" icon={Icon.Download} actions={<ActionPanel><Action title="安装或更新" onAction={() => execute("install")} />{installCommand && <Action.CopyToClipboard title="复制终端安装命令" content={installCommand} />}</ActionPanel>} />

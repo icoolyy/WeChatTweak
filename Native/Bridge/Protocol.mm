@@ -125,7 +125,10 @@ WCTHTTPReply *WCTHandleHTTP(NSData *request, NSString *token,
         for(NSString *key in @[@"state",@"build",@"session",@"contactsSource"])
             if([state[key] isKindOfClass:[NSString class]] && [state[key] length]<=128) body[key]=state[key];
         NSDictionary *caps=[state[@"capabilities"] isKindOfClass:[NSDictionary class]]?state[@"capabilities"]:@{};
-        body[@"capabilities"]=@{@"contacts":@([caps[@"contacts"] isEqual:@YES]),@"openChat":@([caps[@"openChat"] isEqual:@YES])};
+        NSMutableDictionary *capabilities=[NSMutableDictionary dictionary];
+        for(NSString *key in @[@"contacts",@"openChat",@"accountContext",@"contactPagination",@"persistentContacts",@"avatars",@"quicklinks",@"fullContacts"])
+            capabilities[key]=@([caps[key] isEqual:@YES]);
+        body[@"capabilities"]=capabilities;
         if(query[@"challenge"]) body[@"proof"]=WCTHealthProof(token,query[@"challenge"]);
         return reply(200,body);
     }

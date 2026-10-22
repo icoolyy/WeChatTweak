@@ -24,6 +24,8 @@ int main(void) { @autoreleasepool {
     WCTHTTPReply *health=request(@"/health",@"",NO);
     check(health.status==200 && [health.body[@"protocol"] isEqual:@1],"public typed health");
     check(health.body[@"privateAccount"]==nil,"health allowlist excludes account data");
+    for(NSString *key in @[@"accountContext",@"contactPagination",@"persistentContacts",@"avatars",@"quicklinks",@"fullContacts"])
+        check([health.body[@"capabilities"][key] isEqual:@NO],"unverified enhanced capabilities default unavailable");
     WCTHTTPReply *search=request(@"/wechat/search?keyword=fixture&usePinyin=1&fuzzy=1",@"",YES);
     check(search.status==200 && [search.body[@"items"] count]==1,"authenticated real operation dispatch");
     unsigned before=calls;

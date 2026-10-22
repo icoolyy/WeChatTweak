@@ -4,6 +4,10 @@
 
 `Research/` and `Probes/` below are experiments. Never inject research probes as a production bridge.
 
+`Probes/account_identity_probe.mm` is restricted to the named temporary-copy directory. It defers Foundation work to the main queue and records only candidate availability plus keyed equality comparisons. It is excluded from the production Makefile. The same-account restart and logged-out observations, startup timeouts, re-login notice and remaining cross-account/ownership gaps are recorded in [account identity research](Research/account_identity_269602.md). This evidence does not enable persistent contacts or quicklinks.
+
+`269602/ContactPage.mm` is a pure, fixture-tested snapshot pager with HMAC-bound cursors. It is not connected to production HTTP or Raycast; the existing search remains capped at100. `tools/test_native.py` tests235 fixture contacts, stale snapshots, query/account/epoch/options/limit binding and an independently calculated signature vector.
+
 `Research/inspect_269602.py MODULE NEW_OUTPUT_DIRECTORY` reads the pristine
 269602 module, checks its full SHA-256, and writes Qt metadata and candidate
 vtables as JSON. It does not load or call WeChat. Run it with Python 3.9+:

@@ -35,7 +35,7 @@ static void capture(void *) {
         } else dprintf(output,"logged_in=%d candidate_valid=0\n",state!=0);
     }
 }
-__attribute__((constructor)) static void start(void) {
+static void initializeProbe(void *) {
     const char *path=getenv("WCT_ACCOUNT_PROBE_OUTPUT"),*secret=getenv("WCT_ACCOUNT_PROBE_KEY");
     NSString *bundle=NSBundle.mainBundle.bundlePath;
     if(![bundle hasPrefix:@"/private/tmp/wechattweak-runtime-inventory/"] &&
@@ -54,4 +54,9 @@ __attribute__((constructor)) static void start(void) {
     output=open(path,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0600);
     if(output<0) return;
     for(int i=1;i<=120;++i) dispatch_after_f(dispatch_time(DISPATCH_TIME_NOW,(int64_t)i*5*NSEC_PER_SEC),dispatch_get_main_queue(),nullptr,capture);
+}
+// Match the production host: do not initialize NSBundle/Foundation while the
+// WeChat custom loader is still constructing its application environment.
+__attribute__((constructor)) static void start(void) {
+    dispatch_async_f(dispatch_get_main_queue(),nullptr,initializeProbe);
 }

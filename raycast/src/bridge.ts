@@ -6,9 +6,11 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { request } from "node:http";
 
 export interface Contact { id: string; arg: string; title: string; subtitle?: string }
+const enhancedCapabilities = ["accountContext", "contactPagination", "persistentContacts", "avatars", "quicklinks", "fullContacts"] as const;
+type EnhancedCapability = typeof enhancedCapabilities[number];
 export interface Health {
   state: string; session: string; build: string; contactsSource: string;
-  capabilities: { contacts: boolean; openChat: boolean };
+  capabilities: { contacts: boolean; openChat: boolean } & Partial<Record<EnhancedCapability, boolean>>;
 }
 export interface SearchResult { items: Contact[]; session: string; source: string }
 const messages: Record<string, string> = {
@@ -89,8 +91,14 @@ export class BridgeClient {
       !text(value.session, 128) || !value.session || value.build !== "269602" || !text(value.contactsSource, 128) ||
       !object(value.capabilities) || typeof value.capabilities.contacts !== "boolean" || typeof value.capabilities.openChat !== "boolean")
       throw new Error("微信桥接协议或构建不兼容");
+    const capabilities: Health["capabilities"] = { contacts: value.capabilities.contacts, openChat: value.capabilities.openChat };
+    for (const name of enhancedCapabilities) {
+      const flag = value.capabilities[name];
+      if (flag !== undefined && typeof flag !== "boolean") throw new Error("微信桥接协议或构建不兼容");
+      capabilities[name] = flag === true;
+    }
     return { token, health: { state: value.state, session: value.session, build: value.build,
-      contactsSource: value.contactsSource, capabilities: { contacts: value.capabilities.contacts, openChat: value.capabilities.openChat } } };
+      contactsSource: value.contactsSource, capabilities } };
   }
   async health(signal?: AbortSignal): Promise<Health> { return (await this.verified(signal)).health; }
   async search(keyword: string, signal?: AbortSignal): Promise<SearchResult> {

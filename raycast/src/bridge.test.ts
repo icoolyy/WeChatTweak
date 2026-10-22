@@ -21,7 +21,7 @@ test("bridge verifies identity before bearer and confirms epoch-bound opening", 
       if (mode === "html") { res.setHeader("Content-Type", "text/html"); res.end("<html>unrelated service</html>"); return; }
       res.end(JSON.stringify({ service: "WeChatTweak", protocol: mode === "incompatible" ? 2 : 1, state: "ready", build: "269602",
         session: stale ? "epoch2" : "epoch1", contactsSource: "loadedContacts",
-        capabilities: { contacts: true, openChat: true }, proof: hostile ? "0".repeat(64) :
+        capabilities: { contacts: true, openChat: true, ...(mode === "badCapability" ? { persistentContacts: "yes" } : {}) }, proof: hostile ? "0".repeat(64) :
           createHmac("sha256", token).update(`wechattweak-health-v1:${url.searchParams.get("challenge")}`).digest("hex") }));
       return;
     }
@@ -42,6 +42,13 @@ test("bridge verifies identity before bearer and confirms epoch-bound opening", 
   const address = server.address(); assert.ok(address && typeof address !== "string");
   const client = new BridgeClient(path, address.port);
   try {
+    const health = await client.health();
+    for (const key of ["accountContext", "contactPagination", "persistentContacts", "avatars", "quicklinks", "fullContacts"] as const)
+      assert.equal(health.capabilities[key], false);
+    mode = "badCapability";
+    await assert.rejects(client.health(), /协议或构建不兼容/);
+    assert.equal(bearerRequests, 0);
+    mode = "normal";
     const result = await client.search("文件传输助手");
     assert.equal(result.items[0].id, "filehelper");
     await client.open("filehelper", result.session);
