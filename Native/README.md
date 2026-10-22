@@ -30,8 +30,15 @@ allocation; it is not intended for routine use.
 Do not inject either probe into the user's normal installation. A runtime
 experiment requires a prepared copy and coordination of the active WeChat session
 to prevent simultaneous access to account storage. The original installation is
-kept unchanged. Injection of the inventory probe into real WeChat has not yet
-been validated.
+kept unchanged. The inventory probe has run successfully in a logged-in temporary copy after
+fixing a custom-zone reader failure; see the research record. This does not
+validate any contacts API.
+
+For debugger-only repeated research, `wct_inventory_snapshot(path)` runs a fresh
+main-thread snapshot into a new report. `wct_inventory_candidate(index)` exposes
+the first observed pointer only to the debugger, never in the report. Such a
+pointer is not retained, can be stale as soon as execution resumes, and is not
+a verified service handle. Do not call unknown WeChat methods through it.
 
 The following test compiles both the inventory and a disposable host, and never
 launches WeChat. It checks ordinary and prefixed allocations, exclusion after
@@ -46,3 +53,16 @@ The heap introspection interfaces are documented in Apple's SDK `malloc.h` and
 [libmalloc source](https://github.com/apple-oss-distributions/libmalloc/blob/main/src/malloc.c).
 The Qt metadata layout was cross-checked against the
 [Qt 5.15 private metadata header](https://github.com/qt/qtbase/blob/5.15/src/corelib/kernel/qmetaobject_p.h).
+
+`Research/inspect_live_269602.py` is an LLDB import that only reads a stopped
+prepared-copy process. It checks the executable path and module UUID, walks the
+service registry and checks cached contact IDs and schema-backed fields. It prints
+aggregate counts and built-in verification flags, never contact names or IDs.
+A cache snapshot does not establish full database coverage.
+
+`Probes/open_chat_probe.c` is an explicit, main-thread research operation for the
+fixed built-in `filehelper` target. It checks UUID, entry bytes and application
+vtable before using the call convention observed at two real native callers.
+The call returning `1` means invocation only. Confirm it with the selected-session
+model and the real UI. The probe has opened File Transfer successfully without
+typing or sending a message; it is not a general chat API or production bridge.

@@ -97,7 +97,25 @@ mapped mmui vtables 1341
 
 新增 `Native/Probes/object_inventory.c` 和堆扫描测试。探针等待 30 秒，在匹配 arm64 UUID `CDB81058-0FAC-3518-95F5-C0CC7860F9B5` 后只统计候选虚表，不调用对象方法、不输出联系人或内存地址。测试覆盖普通对象、控制块后对象、释放后排除、缺少匹配模块、0600 输出、拒绝覆盖文件及跟随符号链接；`rtk proxy python3 tools/test_native_probes.py` 全部通过。控制块后的对象测试先复现漏检（3/4），修正后为 4/4，释放后为 0。
 
-真实运行时验证准备在 `/tmp/wechattweak-runtime-inventory/WeChat.app` 的重签副本进行，该副本已通过 `codesign --verify --deep --strict`，原安装未改动。此探针尚未注入真实微信：需要先正常退出当前微信，避免同账号并发，再启动临时副本。已向用户提出本次会话控制选择，未收到选择前不执行退出、启动或登录操作。真实联系人枚举和打开聊天仍未验收。
+真实运行时验证准备在 `/tmp/wechattweak-runtime-inventory/WeChat.app` 的重签副本进行，该副本已通过 `codesign --verify --deep --strict`，原安装未改动。用户随后明确允许退出并启动临时副本，已正常退出原微信并执行加载。首次真实扫描在系统 caulk 分配区崩溃：崩溃栈为 caulk::…::zone_enumerate → wct_heap_inventory → inventory_once。原因是该分配区要求非空 memory_reader_t，而最初只在系统默认分配区测试的 NULL 回调不适用。新增注册自定义 malloc zone 的回归，先复现 failed_zones=1，再改为向所有分配区传递显式当前进程读取回调，回归为 failed_zones=0；独立宿主注入测试重新通过。在同一获准临时副本重试已成功：module_match=1、scan_result=0、failed_zones=0；WeChatApplication=1、WindowManager=1、MainWindowSecondary=1、ChatSessionList=2、SearchContentView=1、ContactServiceDestructorCandidate=1，联系人包装类/详情模型/表格视图均为 0。界面确认已登录，扫描后进程保持运行。此结果仅证明候选对象可被观察，真实联系人枚举和打开聊天仍未验收。
+
+## 真实缓存字段与原生打开会话验证
+
+用户批准临时会话控制后，在登录的临时副本完成以下只读验证。可复现脚本为 `Native/Research/inspect_live_269602.py`，仅接受已停止的指定临时进程、正确 UUID，不执行目标表达式，也不输出联系人名字或 ID。
+
+服务获取路径已由指令和运行时对象类型共同确认：模块全局 `0x9e66158` → 管理器（vtable `0x98c53d0`）→ `+0x68` 账号管理器（`0x98ba858`）→ `+0x368` 服务注册表（`0x98b87f8`）→ `+0x70` 注册表中 vtable `0x98b92d8` 的联系人存储对象。注册表和联系人主缓存均为 libc++ unordered_map 布局；主缓存偏移 `0x98`，节点键在 `+0x10`，记录 shared_ptr 在 `+0x28`。运行时遍历条数与容器声明条数一致，所有记录的 `+0x8` 稳定 ID 与索引键相同。
+
+字段绑定函数 `0x4844efc` 直接把数据库字段名与结构偏移关联，独立于显示名称推测：`username=0x8`、`alias=0x20`、`encrypt_username=0x38`、`remark=0x60`、`remark_quan_pin=0x78`、`remark_pin_yin_initial=0x90`、`nick_name=0xa8`、`pin_yin_initial=0xc0`、`quan_pin=0xd8`。内置 filehelper 的 ID 与昵称已匹配。缓存快照证明真实记录和稳定身份映射，不证明整个数据库的加载覆盖范围。`0x108` 的第二索引是按 encrypt_username 哈希建立的索引，不能把它的条数当成全量好友数。原生查找 `0x4148a3c` 与删除 `0x4148dbc` 都持有存储对象 `+0x130` 的 std::mutex；注册表查找 `0x41343c4` 持有 `+0x30` 的 recursive_mutex。运行中的适配器仍需正确使用同步和生命周期规则。
+
+原生打开会话入口 `0x296598` 的实参由调用点 `0x170f234` 和 `0x296c40` 及被调函数共同核对：`x0` 为全局 `0x9f2ffb0` 指向的 WeChatApplication（vtable `0x95a38e0`），`x1` 指向 24 字节 libc++ string，`x2` 指向可为空的 shared_ptr 引用，`x3/x4=0` 为已观察到的默认路径。返回值为 void，不能拿寄存器残值判断成功。
+
+`Native/Probes/open_chat_probe.c` 先检查主线程、UUID、入口 32 字节和应用对象类型，仅以固定内置 `filehelper` 调用该入口。真实调用返回后，界面明确切到 File Transfer，输入框为空，未输入或发送消息。随后程序从 ChatMasterViewModel（vtable `0x95c3c60`）的 `+0xf8` 会话列表 → `+0x40` 已选 cell → `+0x148` SessionKey 核对 filehelper，返回 1。该路径来自 `0xa256e8`、`0xa47f60` 和 `0x1af10`，也校验 QObject back-pointer 和 cell 类型。先前尝试的 model+0x1f0 是待处理请求字段，完成后为空，不能作为会话打开确认。
+
+该实验已经证明内置目标的真实原生打开及程序确认。进一步已确认不依赖堆扫描的已选模型路径：WeChatApplication+0x10 → pimpl[0] LoginState（0x95a36a0）→ +0x28 MainWindow（0x9700e58）→ +0x390 的 map 中 key=0 的 ChatMasterView（0x95c1ca8）→ +0x168 保存的接口指针减 0x10 → ChatMasterViewModel（0x95c3c60）；真实只读路径和 C 探针均确认 filehelper 已选中。该状态路径可用于区分登录阶段。
+
+新增 Native/269602/ContactSearch 与 ContactCache：搜索的中文、备注、别名、拼音、首字母、稳定 ID 和结果上限测试先为 7 项失败，实施后全部通过；缓存读取的有效快照测试先失败，实施后与末项 ID 错误、循环链表、截断读取、声明条数错误及超大条数拒绝测试全部通过。尚需在运行进程内以正确锁和生命周期规则接入这些组件。
+
+一般联系人搜索接口、非内置会话、登录退出/重启后的重新获取、鉴权通信及自动加载安装仍需完成，不能将此探针视为已交付的完整桥接。
 
 ## 构建环境记录
 

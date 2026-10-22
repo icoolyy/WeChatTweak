@@ -9,6 +9,7 @@ typedef struct {
     uintptr_t vtable;
     const char *name;
     uint64_t count;
+    uintptr_t first_candidate; // Observation only; never dereferenced or retained here.
 } WCTHeapTarget;
 
 typedef struct {
@@ -17,6 +18,14 @@ typedef struct {
     uint64_t ranges;
     unsigned failed_zones;
 } WCTHeapInventory;
+
+static kern_return_t wct_local_reader(task_t task, vm_address_t address,
+                                       vm_size_t size, void **local) {
+    (void)size;
+    if (task != mach_task_self()) return KERN_INVALID_ARGUMENT;
+    *local = (void *)address;
+    return KERN_SUCCESS;
+}
 
 static void wct_record_ranges(task_t task, void *context, unsigned type,
                               vm_range_t *ranges, unsigned count) {
@@ -37,6 +46,8 @@ static void wct_record_ranges(task_t task, void *context, unsigned type,
             for (unsigned k = 0; k < length / sizeof(uintptr_t); ++k) {
                 if (prefix[k] != inventory->targets[j].vtable) continue;
                 ++inventory->targets[j].count;
+                if (!inventory->targets[j].first_candidate)
+                    inventory->targets[j].first_candidate = ranges[i].address + k * sizeof(uintptr_t);
                 break; // Count an allocation once for each target, not each word.
             }
         }
@@ -47,7 +58,7 @@ static kern_return_t wct_heap_inventory(WCTHeapInventory *inventory) {
     vm_address_t *zones = NULL;
     unsigned count = 0;
     task_t task = mach_task_self();
-    kern_return_t result = malloc_get_all_zones(task, NULL, &zones, &count);
+    kern_return_t result = malloc_get_all_zones(task, wct_local_reader, &zones, &count);
     if (result != KERN_SUCCESS) return result;
     for (unsigned i = 0; i < count; ++i) {
         malloc_zone_t *zone = (malloc_zone_t *)zones[i];
@@ -58,7 +69,7 @@ static kern_return_t wct_heap_inventory(WCTHeapInventory *inventory) {
         }
         api->force_lock(zone);
         result = api->enumerator(task, inventory, MALLOC_PTR_IN_USE_RANGE_TYPE,
-                                 zones[i], NULL, wct_record_ranges);
+                                 zones[i], wct_local_reader, wct_record_ranges);
         api->force_unlock(zone);
         if (result != KERN_SUCCESS) ++inventory->failed_zones;
     }

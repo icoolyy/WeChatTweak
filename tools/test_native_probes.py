@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the research probe in disposable hosts, never in WeChat."""
 import os
+import ctypes
 from pathlib import Path
 import subprocess
 import tempfile
@@ -26,6 +27,20 @@ with tempfile.TemporaryDirectory(prefix="wct-probe-tests-") as scratch:
         "dispatch_get_main_queue(),0,stop);dispatch_main();}\n"
     )
     flags = ["/usr/bin/clang", "-Wall", "-Wextra", "-Werror"]
+    open_probe = scratch / "open-chat.dylib"
+    run(
+        *flags,
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        str(ROOT / "Native/Probes/open_chat_probe.c"),
+        "-o",
+        str(open_probe)
+    )
+    probe = ctypes.CDLL(str(open_probe))
+    assert probe.wct_probe_open_filehelper() == -2
+    assert probe.wct_probe_current_filehelper() == -2
+    print("PASS: open-chat probe refuses missing module", flush=True)
     run(*flags, str(ROOT / "Native/Probes/heap_inventory_test.c"), "-o", str(heap_test))
     result = run(str(heap_test))
     assert "fixture=4 absent=0" in result.stdout, result.stdout
