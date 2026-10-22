@@ -36,6 +36,15 @@ struct Reader {
 };
 }
 
+NSString *WCTReadNativeString(uintptr_t address, WCTReadMemory reader, NSError **error) {
+    if(error) *error=nil;
+    if(!reader) return nil;
+    Reader memory{reader};
+    NSString *value=memory.string(address);
+    if(!memory.valid && error) *error=[NSError errorWithDomain:@"WeChatTweak.Native" code:1 userInfo:nil];
+    return memory.valid ? value:nil;
+}
+
 NSArray<NSDictionary *> *WCTReadContactCache(uintptr_t storage, WCTReadMemory reader,
                                              NSError **error) {
     if(error) *error=nil;

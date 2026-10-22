@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 typedef BOOL (^WCTReadMemory)(uintptr_t address, void *output, size_t size);
+NSString *WCTReadNativeString(uintptr_t address, WCTReadMemory reader, NSError **error);
 
 // Caller must hold the native storage mutex or stop the entire target process.
 // Returns an owned immutable snapshot; failure never returns a partial snapshot.
