@@ -1,0 +1,51 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "wechattweak-diagnostics",
+  "title": "WeChatTweak Diagnostics",
+  "description": "Inspect modern WeChatTweak compatibility and explain unavailable contact capabilities.",
+  "icon": "icon.svg",
+  "author": "icoolyy",
+  "license": "AGPL-3.0-only",
+  "categories": [
+    "Developer Tools"
+  ],
+  "commands": [
+    {
+      "name": "manage",
+      "title": "Check WeChatTweak Compatibility",
+      "description": "Inspect CLI, WeChat patch and contacts capability independently",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "cliPath",
+      "type": "textfield",
+      "required": true,
+      "title": "WeChatTweak CLI Path",
+      "description": "Absolute path to this branch's dist/wechattweak. Official 2.0.1 lacks the doctor command."
+    }
+  ],
+  "scripts": {
+    "test": "node --experimental-strip-types --test src/diagnostics.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "build": "ray build -e dist -o dist",
+    "dev": "ray develop"
+  },
+  "dependencies": {
+    "@raycast/api": "1.93.2",
+    "react": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.0",
+    "@types/react": "18.3.3",
+    "typescript": "5.7.3",
+    "eslint": "9.20.1",
+    "typescript-eslint": "8.24.0"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}
