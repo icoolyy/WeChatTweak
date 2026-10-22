@@ -1,14 +1,18 @@
 .PHONY: build test clean
+SWIFT ?= swift
+ARCHS ?= arm64 x86_64
 
 build::
-	swift build -c release --arch arm64 --arch x86_64
 	mkdir -p dist
-	cp -f .build/apple/Products/Release/wechattweak dist/wechattweak
+	@for arch in $(ARCHS); do \
+		$(SWIFT) build -c release --arch $$arch || exit $$?; \
+	done
+	lipo -create $(foreach arch,$(ARCHS),.build/$(arch)-apple-macosx/release/wechattweak) -output dist/wechattweak
 	cp -f config.json dist/config.json
 
 test:
-	swift build
-	swift run core-tests
+	$(SWIFT) build
+	$(SWIFT) run core-tests
 	python3 tools/test_cli.py .build/debug/wechattweak
 
 clean::

@@ -303,5 +303,39 @@
         ]
       }
     ]
+  },
+  {
+    "version": "269602",
+    "verification": {
+      "originalBytes": "verified against local arm64 Resources/wechat.dylib",
+      "runtime": "not yet verified; contacts bridge unavailable",
+      "source": "https://github.com/sunnyyoung/WeChatTweak/pull/1042"
+    },
+    "targets": [
+      {
+        "identifier": "revoke",
+        "file": "Contents/Resources/wechat.dylib",
+        "entries": [
+          {
+            "arch": "arm64",
+            "addr": "44de938",
+            "asm": "00008052C0035FD6",
+            "original": "F44FBEA9FD7B01A9"
+          }
+        ]
+      },
+      {
+        "identifier": "multiInstance",
+        "file": "Contents/Resources/wechat.dylib",
+        "entries": [
+          {
+            "arch": "arm64",
+            "addr": "27370c",
+            "asm": "20008052C0035FD6",
+            "original": "FF0306D1FC6F14A9"
+          }
+        ]
+      }
+    ]
   }
 ]
