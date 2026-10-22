@@ -43,7 +43,8 @@ def main():
         assert result.returncode == 0, result.stderr
         assert "4.1.13 (269602)" in result.stdout
         assert config.as_uri() in result.stdout
-        report = run("doctor", "--app", str(app), "--json")
+        # Isolate this fixture from any real bridge already running on the host.
+        report = run("doctor", "--app", str(app), "--json", "--credential-file", str(root / "missing-token"))
         assert report.returncode == 0, report.stderr
         data = json.loads(report.stdout)
         assert data["patchState"] == "ready" and data["pendingWrites"] == 1
@@ -57,7 +58,7 @@ def main():
         mismatch = run("patch", "--app", str(app), "--dry-run")
         assert mismatch.returncode != 0 and "Original bytes mismatch" in mismatch.stderr
         assert binary.read_bytes() == image
-        missing = run("doctor", "--app", str(root / "Missing.app"), "--json")
+        missing = run("doctor", "--app", str(root / "Missing.app"), "--json", "--credential-file", str(root / "missing-token"))
         assert missing.returncode != 0
         assert json.loads(missing.stdout)["patchState"] == "error"
         assert not list(root.glob(".WeChatTweak-stage-*"))

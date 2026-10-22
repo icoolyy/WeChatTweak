@@ -5,7 +5,9 @@ import WeChatTweakCore
 enum Command {
     static func requireStopped(app: URL) throws {
         let info = try AppInfo.read(app: app)
-        guard NSRunningApplication.runningApplications(withBundleIdentifier: info.bundleID).isEmpty else {
+        let running = NSWorkspace.shared.runningApplications
+        guard !running.isEmpty else { throw TweakError("Cannot inspect running applications in this environment; run from a normal Terminal before modifying WeChat") }
+        guard !running.contains(where: { $0.bundleIdentifier == info.bundleID }) else {
             throw TweakError("Quit all WeChat instances before patching or restoring")
         }
     }

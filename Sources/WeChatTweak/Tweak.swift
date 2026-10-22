@@ -47,6 +47,7 @@ struct Tweak: AsyncParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Read-only compatibility and patch-state diagnostics")
         @OptionGroup var options: Options
         @Flag(help: "Print machine-readable diagnostics") var json = false
+        @Option(help: "Explicit private bridge credential file for development") var credentialFile: String?
         mutating func run() async throws {
             var report = Diagnostic(appPath: options.appURL.path)
             do {
@@ -63,6 +64,9 @@ struct Tweak: AsyncParsableCommand {
                     report.patchState = plan.writes.isEmpty ? "applied" : (plan.alreadyPatched > 0 ? "partiallyApplied" : "ready")
                 } else { report.patchState = "unsupportedBuild" }
             } catch { report.patchState = "error"; report.errors.append(error.localizedDescription) }
+            let bridge = await BridgeHealth.check(credential: credentialFile.map { URL(fileURLWithPath: $0) } ?? BridgeHealth.defaultCredential)
+            report.contactsBridgeAvailable = bridge.available
+            report.contactsBridgeReason = bridge.reason
             if json {
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 print(String(decoding: try encoder.encode(report), as: UTF8.self))
@@ -73,7 +77,7 @@ struct Tweak: AsyncParsableCommand {
                 print("Patch state: \(report.patchState); pending writes: \(report.pendingWrites)")
                 print("Configured features: \(report.configuredFeatures.joined(separator: ", "))")
                 print("Original-byte verification missing for \(report.unverifiedLegacyEntries) legacy entries")
-                print("Raycast contacts bridge: unavailable (native adapter not verified)")
+                print("Raycast contacts bridge: \(report.contactsBridgeAvailable ? "available" : "unavailable") (\(report.contactsBridgeReason))")
                 for error in report.errors { print("Error: \(error)") }
             }
             if !report.errors.isEmpty { throw ExitCode.failure }
@@ -85,6 +89,8 @@ struct Tweak: AsyncParsableCommand {
         @OptionGroup var options: Options
         @Flag(help: "Validate and list writes without modifying any application file") var dryRun = false
         @Option(help: "Directory retaining complete original application backups") var backupDir: String?
+        @Flag(help: "Install the verified arm64 build-269602 Raycast bridge transactionally") var installBridge = false
+        @Option(help: "Bridge dylib path (defaults beside the CLI)") var bridgeLibrary: String?
         mutating func run() async throws {
             let app = options.appURL
             let info = try AppInfo.read(app: app)
@@ -95,19 +101,22 @@ struct Tweak: AsyncParsableCommand {
                 throw TweakError("Unsupported WeChat build \(info.build); no files changed")
             }
             let plan = try PatchPlan.prepare(app: app, config: config)
+            let bridge = try installBridge ? BridgePlan.prepare(app: app, payload: bridgeLibrary.map { URL(fileURLWithPath: $0) } ??
+                (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).deletingLastPathComponent().appendingPathComponent("WeChatTweakBridge.dylib")) : nil
             print("Preflight passed: \(plan.writes.count) writes, \(plan.alreadyPatched) already patched")
             for write in plan.writes { print("\(write.file.path) @ 0x\(String(write.offset, radix: 16)): \(write.before.count) bytes") }
             if plan.unverifiedLegacyEntries > 0 { print("Warning: \(plan.unverifiedLegacyEntries) legacy entries have no original-byte constraint") }
+            if let bridge { print("Bridge preflight passed: \(bridge.changed ? "install/update required" : "already installed")") }
             if dryRun { print("Dry run: no files changed"); return }
-            if plan.writes.isEmpty { print("Already patched; no files changed"); return }
+            if plan.writes.isEmpty && bridge?.changed != true { print("Already patched; no files changed"); return }
             try Command.requireStopped(app: app)
             let root = backupDir.map { URL(fileURLWithPath: $0) } ?? app.deletingLastPathComponent().appendingPathComponent(".WeChatTweakBackups")
-            let files = plan.writes.map { String($0.file.path.dropFirst(app.path.count + 1)) }
-            let backup = try AppTransaction.apply(app: app, plan: plan, backupRoot: root) { staged in
+            let files = plan.writes.map { String($0.file.path.dropFirst(app.path.count + 1)) } + (bridge == nil ? [] : ["Contents/MacOS/WeChat", "Contents/Frameworks/WeChatTweakBridge.dylib"])
+            let backup = try AppTransaction.apply(app: app, plan: plan, backupRoot: root, bridge: bridge) { staged in
                 try Command.resign(app: staged, relativeFiles: files)
             }
             print("Patch and signature verification completed. Backup: \(backup.path)")
-            print("Native behavior still requires live verification; this does not install a Raycast contacts bridge.")
+            print(bridge == nil ? "Bridge not requested; use --install-bridge for Raycast contacts." : "Bridge installed. Launch WeChat normally, log in, then run Raycast Search WeChat Contacts.")
         }
     }
 
@@ -135,7 +144,7 @@ struct Diagnostic: Encodable {
     var pendingWrites = 0
     var alreadyPatched = 0
     var unverifiedLegacyEntries = 0
-    let contactsBridgeAvailable = false
-    let contactsBridgeReason = "No verified native contacts/open-chat adapter for this build"
+    var contactsBridgeAvailable = false
+    var contactsBridgeReason = "Bridge not checked"
     var errors: [String] = []
 }

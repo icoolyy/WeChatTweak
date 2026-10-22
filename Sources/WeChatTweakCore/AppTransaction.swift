@@ -26,16 +26,17 @@ public enum AppTransaction {
         let files: [String: String]
     }
 
-    public static func apply(app: URL, plan: PatchPlan, backupRoot: URL, signer: (URL) throws -> Void) throws -> URL {
+    public static func apply(app: URL, plan: PatchPlan, backupRoot: URL, bridge: BridgePlan? = nil, signer: (URL) throws -> Void) throws -> URL {
         let app = app.standardizedFileURL.resolvingSymlinksInPath()
         let root = backupRoot.standardizedFileURL.resolvingSymlinksInPath()
-        guard plan.app == app, !plan.writes.isEmpty, !root.path.hasPrefix(app.path + "/"), root != app else {
+        guard plan.app == app, bridge == nil || bridge?.app == app, (!plan.writes.isEmpty || bridge?.changed == true), !root.path.hasPrefix(app.path + "/"), root != app else {
             throw TweakError("Invalid patch plan or backup location")
         }
         return try withLock(app: app) {
             let info = try AppInfo.read(app: app)
             guard info.build == plan.version else { throw TweakError("Application build changed since preflight") }
             try validateWrites(plan, within: app)
+            try bridge?.validate(within: app)
             let fm = FileManager.default
             try fm.createDirectory(at: root, withIntermediateDirectories: true)
             let backup = root.appendingPathComponent(UUID().uuidString)
@@ -59,6 +60,7 @@ public enum AppTransaction {
                     try handle.write(contentsOf: write.after)
                     try handle.synchronize()
                 }
+                try bridge?.apply(within: staged)
                 try signer(staged)
                 let current = try fingerprints(app)
                 guard current == manifest.files else { throw TweakError("Application changed during staging; refusing replacement") }

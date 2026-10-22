@@ -15,11 +15,14 @@ CASES = [
         ["Adapter.mm", "ContactCache.mm", "ContactSearch.mm", "AdapterTests.mm"],
         True,
     ),
+    ("../Bridge/protocol", ["../Bridge/Protocol.mm", "../Bridge/ProtocolTests.mm"], True),
+    ("../Bridge/credentials", ["../Bridge/Credentials.mm", "../Bridge/CredentialsTests.mm"], True),
+    ("../Bridge/operation", ["../Bridge/Protocol.mm", "../Bridge/NativeOperation.mm", "../Bridge/NativeOperationTests.mm"], True),
 ]
 
 with tempfile.TemporaryDirectory(prefix="wct-native-tests-") as directory:
     for name, sources, objc in CASES:
-        executable = Path(directory) / name
+        executable = Path(directory) / Path(name).name
         command = ["/usr/bin/clang++", "-std=c++17", "-Wall", "-Wextra", "-Werror"]
         if objc:
             command += ["-fobjc-arc", "-framework", "Foundation"]

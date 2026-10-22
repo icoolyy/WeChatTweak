@@ -85,7 +85,7 @@ struct MachOImage {
         return result
     }
 
-    private static func read(_ data: Data, _ offset: UInt64, _ size: Int, big: Bool = false) throws -> UInt64 {
+    static func read(_ data: Data, _ offset: UInt64, _ size: Int, big: Bool = false) throws -> UInt64 {
         guard offset <= data.count, UInt64(size) <= UInt64(data.count) - offset else { throw TweakError("Truncated Mach-O") }
         var result: UInt64 = 0
         for i in 0..<size {
