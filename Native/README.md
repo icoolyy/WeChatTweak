@@ -1,7 +1,8 @@
-# Native research tools
+# Native adapter and research tools
 
-These tools are experiments, not the contacts bridge. They do not establish
-support for searching contacts or opening chats.
+`269602/` contains the verified arm64 loaded-contact adapter. `Bridge/` hosts the production authenticated loopback protocol and main-thread lifecycle. `make native` compiles an explicit production source list, excluding test fixtures and probes. Installation uses the transactional CLI `patch --install-bridge`; see `docs/installation.md`.
+
+`Research/` and `Probes/` below are experiments. Never inject research probes as a production bridge.
 
 `Research/inspect_269602.py MODULE NEW_OUTPUT_DIRECTORY` reads the pristine
 269602 module, checks its full SHA-256, and writes Qt metadata and candidate

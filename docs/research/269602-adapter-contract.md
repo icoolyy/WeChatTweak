@@ -39,4 +39,18 @@ void open(void *application, const void *libcxx_string_24,
 
 已正常重启临时副本并重新登录：登录入口阶段为 not_logged_in、两个能力均为 false；进入主界面后为 ready，代次从 0 增加到 1，真实搜索验证再次返回 15，filehelper 请求和已选 ID 确认再次通过。新进程使用新的启动 nonce，没有复用旧进程对象。未执行账号注销或切换账号。
 
-完整产品鉴权协议及配套 Raycast、非调试器自动加载和安装恢复还需完成。已加载联系人的工作能力不意味着已经完成这些交付项。
+上述记录是探针阶段的门槛证据；正式实现和验证见下文。已加载联系人的能力不等于完整联系人数据库枚举。
+
+
+## 正式桥接交付与验收（2026-10-22）
+
+- `Native/Bridge/` 实现 HTTP/1.1 回环服务：公开且不含账号内容的 `/health`，Bearer 鉴权的 `/wechat/search` 和 `/wechat/start`。HMAC 随机挑战先验证服务身份，再由 Raycast 发送凭证。凭证文件必须为当前 UID、普通文件、0600，拒绝符号链接和 FIFO。
+- 正式服务在已授权临时微信中完成鉴权健康检查、中文搜索 builtin filehelper、实际选中确认。错误 token401、Origin403、请求/查询大小限制、端口占用、慢请求、5秒操作超时、停止后重启/旧世代拒绝均通过独立传输夹具。
+- 对主线程排队另设8个槽位，超时后槽位保留到实际排队块执行并跳过原生调用，防止 UI 被阻塞时堆积无限 native 工作。取消后的主线程任务不调用适配器已有测试。
+- 安装器先比对 arm64 `__text` 代码指纹（只归一化两个明确补丁），与 ad-hoc 签名变化隔离；插入 `@executable_path/../Frameworks/WeChatTweakBridge.dylib` 加载命令，只使用已确认的零填充空间。启用标记位于 Resources；Frameworks 放普通标记会导致 codesign 失败，已实测并修正。
+- 临时包实际事务安装、deep/strict 签名校验、重复预检无改动通过；正常启动自动提供未登录健康状态，手机确认后变为 ready。无需 LLDB 或 DYLD 环境变量。
+- 默认实际凭证为 `~/Library/Application Support/WeChatTweak/bridge-token`，由正常运行微信的当前用户创建，未打印内容。CLI doctor 与配套 Raycast 客户端均能验证身份和能力。
+- Raycast 配套扩展已本地载入；偏好 CLI 指向本仓库 dist/wechattweak，默认凭证路径。Raycast 窗口中中文搜索文件传输助手返回真实条目，Enter 打开动作在 confirmed 后正常关闭窗口。相同生产客户端的中文、拼音和确认打开实际请求全部通过。诊断窗口显示 CLI2.1.0-dev、微信4.1.13/269602 和桥接可用；字节状态检查仍指向尚未修改的原安装，因此显示待应用，这是两个独立状态。
+- 没有发送或撤回消息，没有修改 `/Applications/WeChat.app`。主动登出再登录、切换账号（尤其分配器重用相同对象地址）、长时间稳定性仍未实测，不将其写作通过。
+
+全量核心测试23个（含本地真实输入的 opt-in 安装事务测试）、CLI6场景、Native7套夹具、HTTP传输、Raycast5测试及类型检查/lint/build通过。独立新审查读取实现后未报告新的高严重性问题，但审查代理因额度限制未完成最终结论；不能将该审查记为完整通过。

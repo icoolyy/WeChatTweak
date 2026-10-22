@@ -8,7 +8,7 @@ A command-line tool for tweaking WeChat.
 
 ## 本分支兼容修复
 
-`hotfix/wechat-4.1.13-raycast` 提供新版模块选择、全量补丁预检、完整备份恢复和独立 Raycast 诊断扩展。微信 4.1.13 / build 269602 的 arm64 原始字节已在本机匹配；真实防撤回、多开效果尚未验收，**Raycast 联系人搜索与打开聊天仍未完成**。
+`hotfix/wechat-4.1.13-raycast` 提供全量补丁预检、整包备份恢复，以及微信 4.1.13 / build 269602 / arm64 的原生联系人桥接和配套 Raycast 搜索。真实微信临时副本已通过鉴权搜索、打开会话确认、安装签名和正常启动自动加载验证。搜索范围是微信已加载的联系人缓存；防撤回和多开的实际效果仍需专用测试。
 
 查看 [安装与恢复步骤](docs/installation.md)、[逐项兼容状态](docs/compatibility.md) 和 [原生验证证据](docs/research/269602-native-compatibility.md)。本分支需使用自身构建产物，下面的官方 Homebrew 命令不会安装本分支改动。
 
