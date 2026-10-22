@@ -1,4 +1,18 @@
 import Foundation
+import CryptoKit
+
+enum FileDigest {
+    static func hash(data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+    static func hash(file: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var hash = SHA256()
+        while let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty { hash.update(data: chunk) }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+}
 
 public struct PatchWrite: Sendable {
     public let file: URL
@@ -13,6 +27,7 @@ public struct PatchPlan: Sendable {
     public let writes: [PatchWrite]
     public let alreadyPatched: Int
     public let unverifiedLegacyEntries: Int
+    public let sourceHashes: [URL: String]
 
     public static func targetURL(app: URL, relative: String) throws -> URL {
         let components = relative.split(separator: "/", omittingEmptySubsequences: false)
@@ -34,7 +49,7 @@ public struct PatchPlan: Sendable {
         for target in config.targets {
             guard !target.entries.isEmpty else { throw TweakError("Empty patch target: \(target.identifier)") }
             let file = try targetURL(app: app, relative: target.file)
-            if images[file] == nil { images[file] = try MachOImage(data: Data(contentsOf: file, options: .mappedIfSafe)) }
+            if images[file] == nil { images[file] = try MachOImage(data: Data(contentsOf: file)) }
             guard let image = images[file] else { throw TweakError("Missing patch image") }
             for entry in target.entries {
                 total += 1
@@ -51,6 +66,6 @@ public struct PatchPlan: Sendable {
             }
         }
         guard total > 0 else { throw TweakError("No patch entries") }
-        return PatchPlan(app: app.standardizedFileURL.resolvingSymlinksInPath(), version: config.version, writes: writes, alreadyPatched: alreadyPatched, unverifiedLegacyEntries: legacy)
+        return PatchPlan(app: app.standardizedFileURL.resolvingSymlinksInPath(), version: config.version, writes: writes, alreadyPatched: alreadyPatched, unverifiedLegacyEntries: legacy, sourceHashes: images.mapValues { FileDigest.hash(data: $0.data) })
     }
 }

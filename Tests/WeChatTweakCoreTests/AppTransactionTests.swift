@@ -10,6 +10,46 @@ func addAppInfo(_ app: URL, build: String = "269602") throws {
 }
 
 final class AppTransactionTests {
+    func testChangedMachOAndAlreadyPatchedTargetsInvalidatePlan() throws {
+        try withFixture { app, file in
+            try addAppInfo(app)
+            let root = app.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let plan = try PatchPlan.prepare(app: app, config: testConfig())
+            var malformed = thinFixture(); malformed[36] = 0
+            try malformed.write(to: file)
+            try checkThrows(try AppTransaction.apply(app: app, plan: plan, backupRoot: root) { _ in })
+            try checkEqual(try Data(contentsOf: file), malformed)
+
+            try thinFixture().write(to: file)
+            let second = app.appendingPathComponent("Contents/MacOS/Other")
+            var patched = thinFixture(); patched.replaceSubrange(0x100..<0x108, with: [0,0,128,82,192,3,95,214])
+            try patched.write(to: second)
+            let config = Config(version: "269602", targets: try testConfig().targets + testConfig(file: "Contents/MacOS/Other").targets)
+            let mixed = try PatchPlan.prepare(app: app, config: config)
+            patched[0x100] = 99; try patched.write(to: second)
+            try checkThrows(try AppTransaction.apply(app: app, plan: mixed, backupRoot: root) { _ in })
+            try checkEqual(try Data(contentsOf: file), thinFixture())
+        }
+    }
+
+    func testBackupWithChangedExecutableModeCannotReplaceLiveApp() throws {
+        try withFixture { app, file in
+            try addAppInfo(app)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+            let root = app.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let backup = try AppTransaction.apply(app: app, plan: PatchPlan.prepare(app: app, config: testConfig()), backupRoot: root) { _ in }
+            let damaged = backup.appendingPathComponent("original.app/Contents/MacOS/WeChat")
+            try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: damaged.path)
+            let before = try Data(contentsOf: file)
+            try checkThrows(try AppTransaction.restore(app: app, backup: backup))
+            try checkEqual(try Data(contentsOf: file), before)
+            let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber
+            try checkEqual(mode?.intValue, 0o755)
+        }
+    }
+
     func testSignFailurePreservesOriginalAndRetainsBackup() throws {
         try withFixture { app, file in
             try addAppInfo(app)
@@ -88,6 +128,8 @@ final class AppTransactionTests {
 }
 
 @MainActor let transactionTests: [(String, () throws -> Void)] = [
+    ("changed Mach-O and skipped targets invalidate plan", AppTransactionTests().testChangedMachOAndAlreadyPatchedTargetsInvalidatePlan),
+    ("damaged executable mode rejects backup", AppTransactionTests().testBackupWithChangedExecutableModeCannotReplaceLiveApp),
     ("sign failure preserves original", AppTransactionTests().testSignFailurePreservesOriginalAndRetainsBackup),
     ("apply, restore, upgrade and damage guards", AppTransactionTests().testApplyRestoreAndRejectUpgradedAppOrDamagedBackup),
     ("stale plan and failed backup", AppTransactionTests().testStalePlanAndBackupFailureDoNotMutateApp),

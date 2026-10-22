@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 import Darwin
 
 /// A same-filesystem replacement with rollback if moving the staged app fails.
@@ -94,6 +93,13 @@ public enum AppTransaction {
     }
 
     private static func validateWrites(_ plan: PatchPlan, within root: URL) throws {
+        // Revalidate every preflight image, including already-patched targets and
+        // Mach-O metadata. Checking pending instruction bytes alone is insufficient.
+        for (source, hash) in plan.sourceHashes {
+            guard source.path.hasPrefix(plan.app.path + "/") else { throw TweakError("Invalid source target") }
+            let file = try PatchPlan.targetURL(app: root, relative: String(source.path.dropFirst(plan.app.path.count + 1)))
+            guard try FileDigest.hash(file: file) == hash else { throw TweakError("Application image changed since preflight") }
+        }
         for write in plan.writes {
             guard write.file.path.hasPrefix(plan.app.path + "/") else { throw TweakError("Invalid write target") }
             let file = try PatchPlan.targetURL(app: root, relative: String(write.file.path.dropFirst(plan.app.path.count + 1)))
@@ -122,22 +128,23 @@ public enum AppTransaction {
         guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isSymbolicLinkKey, .isRegularFileKey], errorHandler: { _, error in failure = error; return false }) else {
             throw TweakError("Cannot enumerate application")
         }
-        var result: [String: String] = [:]
+        let rootMode = try fm.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber
+        var result: [String: String] = [".": "directory:\(rootMode?.intValue ?? -1)"]
         for case let file as URL in enumerator {
             // Foundation may enumerate /var through its /private/var alias.
             // Enumerator depth gives the relative name without string-prefix assumptions.
             let relative = file.pathComponents.suffix(enumerator.level).joined(separator: "/")
             let values = try file.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
+            let attributes = try fm.attributesOfItem(atPath: file.path)
+            guard let mode = attributes[.posixPermissions] as? NSNumber else { throw TweakError("Missing file permissions") }
             if values.isSymbolicLink == true {
                 enumerator.skipDescendants()
-                result[relative] = "link:" + (try fm.destinationOfSymbolicLink(atPath: file.path))
+                result[relative] = "link:\(mode.intValue):" + (try fm.destinationOfSymbolicLink(atPath: file.path))
             } else if values.isRegularFile == true {
-                let handle = try FileHandle(forReadingFrom: file)
-                defer { try? handle.close() }
-                var hash = SHA256()
-                while let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty { hash.update(data: chunk) }
-                result[relative] = hash.finalize().map { String(format: "%02x", $0) }.joined()
-            }
+                result[relative] = "file:\(mode.intValue):" + (try FileDigest.hash(file: file))
+            } else if attributes[.type] as? FileAttributeType == .typeDirectory {
+                result[relative] = "directory:\(mode.intValue)"
+            } else { throw TweakError("Unsupported special file in application backup") }
         }
         if let failure { throw failure }
         guard !result.isEmpty else { throw TweakError("Empty application backup") }
