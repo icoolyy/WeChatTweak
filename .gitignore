@@ -62,3 +62,4 @@ xcuserdata/
 /dist/
 /raycast/node_modules/
 /raycast/dist/
+/raycast/raycast-env.d.ts

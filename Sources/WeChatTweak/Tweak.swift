@@ -139,4 +139,3 @@ struct Diagnostic: Encodable {
     let contactsBridgeReason = "No verified native contacts/open-chat adapter for this build"
     var errors: [String] = []
 }
-
