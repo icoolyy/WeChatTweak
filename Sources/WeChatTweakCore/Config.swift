@@ -8,12 +8,12 @@
 import Foundation
 import MachO
 
-struct Config: Decodable {
-    enum Arch: String, Decodable {
+public struct Config: Decodable {
+    public enum Arch: String, Decodable {
         case arm64
         case x86_64
 
-        var cpu: UInt32 {
+        public var cpu: UInt32 {
             switch self {
             case .arm64:
                 return UInt32(CPU_TYPE_ARM64)
@@ -23,10 +23,10 @@ struct Config: Decodable {
         }
     }
 
-    struct Entry: Decodable {
-        let arch: Arch
-        let addr: UInt64
-        let asm: Data
+    public struct Entry: Decodable {
+        public let arch: Arch
+        public let addr: UInt64
+        public let asm: Data
 
         private enum CodingKeys: CodingKey {
             case arch
@@ -34,7 +34,7 @@ struct Config: Decodable {
             case asm
         }
 
-        init(from decoder: any Decoder) throws {
+        public init(from decoder: any Decoder) throws {
             let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
             self.arch = try container.decode(Arch.self, forKey: .arch)
             self.addr = try {
@@ -62,37 +62,53 @@ struct Config: Decodable {
         }
     }
 
-    struct Target: Decodable {
-        let identifier: String
-        let entries: [Entry]
+    public struct Target: Decodable {
+        public let identifier: String
+        public let entries: [Entry]
 
         private enum CodingKeys: CodingKey {
             case identifier
             case entries
         }
 
-        init(from decoder: any Decoder) throws {
+        public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.identifier = try container.decode(String.self, forKey: .identifier)
             self.entries = try container.decode([Entry].self, forKey: .entries)
         }
     }
 
-    let version: String
-    let targets: [Target]
+    public let version: String
+    public let targets: [Target]
 
-    static func load(url: URL) async throws -> [Config] {
+    public static func load(url: URL) async throws -> [Config] {
         if url.isFileURL {
             return try JSONDecoder().decode(
                 [Config].self,
                 from: Data(contentsOf: url)
             )
         } else {
-            return try JSONDecoder().decode(
-                [Config].self,
-                from: try await URLSession.shared.data(from: url).0
-            )
+            guard ["https", "http"].contains(url.scheme?.lowercased() ?? "") else {
+                throw TweakError("Config URL must use HTTP or HTTPS")
+            }
+            let (data, response) = try await URLSession.shared.data(from: url)
+            return try decode(data: data, response: response)
         }
+    }
+
+    public static func decode(data: Data, response: URLResponse) throws -> [Config] {
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw TweakError("Config download failed: HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+        return try JSONDecoder().decode([Config].self, from: data)
+    }
+
+    public static func defaultURL(executable: URL) throws -> URL {
+        let url = executable.resolvingSymlinksInPath().deletingLastPathComponent().appendingPathComponent("config.json")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw TweakError("No packaged config.json found. Pass --config /path/to/config.json or build with make build")
+        }
+        return url
     }
 }
 

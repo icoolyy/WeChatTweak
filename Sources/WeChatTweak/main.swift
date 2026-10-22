@@ -1,3 +1,4 @@
+import WeChatTweakCore
 //
 //  main.swift
 //
@@ -20,7 +21,9 @@ extension Tweak {
             print("------ Current version ------")
             print(try await Command.version(app: options.app) ?? "unknown")
             print("------ Supported versions ------")
-            try await Config.load(url: options.config).forEach({ print($0.version) })
+            let source = try options.configURL()
+            print("Config: \(source.absoluteString)")
+            try await Config.load(url: source).forEach({ print($0.version) })
             Darwin.exit(EXIT_SUCCESS)
         }
     }
@@ -40,7 +43,9 @@ extension Tweak {
             print("WeChat version: \(version ?? "unknown")")
 
             print("------ Config ------")
-            guard let config = (try await Config.load(url: options.config)).first(where: { $0.version == version }) else {
+            let source = try options.configURL()
+            print("Config: \(source.absoluteString)")
+            guard let config = (try await Config.load(url: source)).first(where: { $0.version == version }) else {
                 throw Error.unsupportedVersion
             }
             print("Matched config: \(config)")
@@ -113,7 +118,11 @@ struct Tweak: AsyncParsableCommand {
                 }
             }
         )
-        var config: URL = URL(string:"https://raw.githubusercontent.com/sunnyyoung/WeChatTweak/refs/heads/master/config.json")!
+        var config: URL?
+
+        func configURL() throws -> URL {
+            try config ?? Config.defaultURL(executable: URL(fileURLWithPath: CommandLine.arguments[0]))
+        }
     }
 
     static let configuration = CommandConfiguration(

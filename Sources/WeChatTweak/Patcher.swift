@@ -1,3 +1,4 @@
+import WeChatTweakCore
 //
 //  Patcher.swift
 //  WeChatTweak

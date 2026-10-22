@@ -1,3 +1,4 @@
+import WeChatTweakCore
 //
 //  Command.swift
 //
@@ -20,7 +21,7 @@ struct Command {
     }
 
     static func version(app: URL) async throws -> String? {
-        try await Command.execute(command: "defaults read \(app.appendingPathComponent("Contents/Info.plist").path) CFBundleVersion")
+        try AppInfo.read(app: app).build
     }
 
     static func patch(app: URL, config: Config) async throws {
