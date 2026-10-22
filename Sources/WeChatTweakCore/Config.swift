@@ -8,8 +8,8 @@
 import Foundation
 import MachO
 
-public struct Config: Decodable {
-    public enum Arch: String, Decodable {
+public struct Config: Decodable, Sendable {
+    public enum Arch: String, Decodable, Sendable {
         case arm64
         case x86_64
 
@@ -23,15 +23,17 @@ public struct Config: Decodable {
         }
     }
 
-    public struct Entry: Decodable {
+    public struct Entry: Decodable, Sendable {
         public let arch: Arch
         public let addr: UInt64
         public let asm: Data
+        public let original: Data?
 
         private enum CodingKeys: CodingKey {
             case arch
             case addr
             case asm
+            case original
         }
 
         public init(from decoder: any Decoder) throws {
@@ -59,27 +61,43 @@ public struct Config: Decodable {
                 }
                 return value
             }()
+            let original = try container.decodeIfPresent(String.self, forKey: .original)
+            if let original {
+                guard let bytes = Data(hex: original), bytes.count == asm.count, !bytes.isEmpty else {
+                    throw TweakError("Original bytes must have the same nonzero length as asm")
+                }
+                self.original = bytes
+            } else { self.original = nil }
+            guard !asm.isEmpty else { throw TweakError("Patch bytes must not be empty") }
         }
     }
 
-    public struct Target: Decodable {
+    public struct Target: Decodable, Sendable {
         public let identifier: String
         public let entries: [Entry]
+        public let file: String
 
         private enum CodingKeys: CodingKey {
             case identifier
             case entries
+            case file
         }
 
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.identifier = try container.decode(String.self, forKey: .identifier)
             self.entries = try container.decode([Entry].self, forKey: .entries)
+            self.file = try container.decodeIfPresent(String.self, forKey: .file) ?? "Contents/MacOS/WeChat"
         }
     }
 
     public let version: String
     public let targets: [Target]
+
+    public init(version: String, targets: [Target]) {
+        self.version = version
+        self.targets = targets
+    }
 
     public static func load(url: URL) async throws -> [Config] {
         if url.isFileURL {

@@ -20,9 +20,9 @@ let tests: [(String, () throws -> Void)] = [
     ("HTTP failure before decode", ConfigTests().testHTTPFailureIsReportedBeforeJSONDecoding),
 ]
 var failures = 0
-for (name, body) in tests {
+for (name, body) in tests + patchTests {
     do { try body(); print("PASS: \(name)") }
     catch { failures += 1; print("FAIL: \(name): \(error)") }
 }
-print("\(tests.count) tests, \(failures) failures")
+print("\(tests.count + patchTests.count) tests, \(failures) failures")
 exit(failures == 0 ? 0 : 1)
