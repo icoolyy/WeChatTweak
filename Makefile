@@ -7,7 +7,9 @@ build::
 	cp -f config.json dist/config.json
 
 test:
+	swift build
 	swift run core-tests
+	python3 tools/test_cli.py .build/debug/wechattweak
 
 clean::
 	rm -rf .build

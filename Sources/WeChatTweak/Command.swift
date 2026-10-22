@@ -1,58 +1,22 @@
-import WeChatTweakCore
-//
-//  Command.swift
-//
-//  Created by Sunny Young.
-//
-
 import Foundation
-import ArgumentParser
+import AppKit
+import WeChatTweakCore
 
-struct Command {
-    enum Error: @unchecked Sendable, LocalizedError {
-        case executing(command: String, error: NSDictionary)
-
-        var errorDescription: String? {
-            switch self {
-            case let .executing(command, error):
-                return "executing: \(command) error: \(error)"
-            }
+enum Command {
+    static func requireStopped(app: URL) throws {
+        let info = try AppInfo.read(app: app)
+        guard NSRunningApplication.runningApplications(withBundleIdentifier: info.bundleID).isEmpty else {
+            throw TweakError("Quit all WeChat instances before patching or restoring")
         }
     }
 
-    static func version(app: URL) async throws -> String? {
-        try AppInfo.read(app: app).build
-    }
-
-    static func patch(app: URL, config: Config) async throws {
-        try Patcher.patch(binary: app.appendingPathComponent("Contents/MacOS/WeChat"), config: config)
-    }
-
-    static func resign(app: URL) async throws {
-        try await Command.execute(command: "codesign --remove-sign \(app.path)")
-        try await Command.execute(command: "codesign --force --deep --sign - \(app.path)")
-        try await Command.execute(command: "xattr -cr \(app.path)")
-    }
-
-    @discardableResult
-    private static func execute(command: String) async throws -> String? {
-        guard let script = NSAppleScript(source: "do shell script \"\(command)\"") else {
-            throw Error.executing(
-                command: command,
-                error: ["error": "Create script failed."]
-            )
+    static func resign(app: URL, relativeFiles: [String]) throws {
+        for path in Set(relativeFiles).sorted() {
+            let file = try PatchPlan.targetURL(app: app, relative: path)
+            try ProcessRunner.run(executable: URL(fileURLWithPath: "/usr/bin/codesign"), arguments: ["--force", "--sign", "-", file.path])
         }
-
-        var error: NSDictionary?
-        let descriptor = script.executeAndReturnError(&error)
-
-        if let error = error {
-            throw Error.executing(
-                command: command,
-                error: error
-            )
-        } else {
-            return descriptor.stringValue
-        }
+        try ProcessRunner.run(executable: URL(fileURLWithPath: "/usr/bin/codesign"), arguments: ["--force", "--deep", "--sign", "-", app.path])
+        try ProcessRunner.run(executable: URL(fileURLWithPath: "/usr/bin/xattr"), arguments: ["-cr", app.path])
+        try ProcessRunner.run(executable: URL(fileURLWithPath: "/usr/bin/codesign"), arguments: ["--verify", "--deep", "--strict", app.path])
     }
 }
