@@ -10,6 +10,7 @@ CASES = [
     ("mutex", ["NativeMutexTests.cpp"], False),
     ("cache", ["ContactCache.mm", "ContactCacheTests.mm"], True),
     ("search", ["ContactSearch.mm", "ContactSearchTests.mm"], True),
+    ("page", ["ContactSearch.mm", "ContactPage.mm", "ContactPageTests.mm"], True),
     (
         "adapter",
         ["Adapter.mm", "ContactCache.mm", "ContactSearch.mm", "AdapterTests.mm"],

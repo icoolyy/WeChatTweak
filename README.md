@@ -15,7 +15,7 @@
 | 置顶与最近联系人 | 支持最多 100 个置顶、最近 10 条；绑定当前桥接会话，世代变化后旧记录不显示 |
 | 备份、安装和恢复 | 整包备份、暂存写入、重签名、严格签名校验及恢复保护已验证 |
 | 防撤回、客户端多开 | 已配置对应字节补丁；真实消息和第二实例效果尚未验收 |
-| 阻止自动更新 | 未适配此构建 |
+| 阻止自动更新 | App Store 管理更新；尚不支持单独阻止微信更新，管理页提供渠道诊断和设置说明 |
 | 其他微信构建、官网版、x86_64 | 未验证本次原生桥接兼容性 |
 
 重启及登录前后重新获取原生对象已验证；主动切换账号和长期运行的稳定性仍未完成实测。完整验证边界见 [兼容性记录](docs/compatibility.md)。
@@ -231,6 +231,10 @@ sudo ./dist/wechattweak restore \
 恢复后可以在 Raycast 设置中停用本地 WeChat 扩展并停止开发进程。凭证文件本身不会启动服务，可以保留。
 
 ### 微信或本项目更新后
+
+当前 App Store 版微信的自动更新由 App Store 管理。新版 `doctor --json` 会报告 `distribution: "appStore"`、`automaticUpdates.status: "managedByAppStore"` 和 `independentlyBlocked: false`；Raycast 管理页同步展示这一限制。未检测到普通 receipt 文件时仅报告 `unknown`，不会据此认定为官网版。
+
+如果需要手动管理更新，在 Mac 上打开 **App Store → 设置 → 自动更新**，根据需要调整。这个开关影响 App Store 安装的其他应用，本项目不会替你修改。设置位置见 [Apple 官方说明](https://support.apple.com/en-gb/guide/app-store/mchlp2257/mac)。当前没有已验证的微信内部更新补丁可代替此设置。
 
 微信升级可能替换已修改的应用及桥接。更新后先运行 `doctor --json` 和 `patch --install-bridge --dry-run`，只有当前构建重新通过预检才安装。本分支目前只验证上述构建；不能用旧备份覆盖已升级到不同构建的微信，CLI 会拒绝此类恢复。
 

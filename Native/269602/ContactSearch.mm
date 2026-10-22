@@ -5,6 +5,12 @@ NSArray<NSDictionary *> *WCTSearchContacts(NSArray<NSDictionary *> *contacts,
                                           BOOL fuzzy, NSUInteger limit) {
     limit = MIN(limit, (NSUInteger)100);
     if (!limit) return @[];
+    NSArray *items=WCTMatchingContacts(contacts,keyword,pinyin,fuzzy);
+    return items.count>limit ? [items subarrayWithRange:NSMakeRange(0,limit)] : items;
+}
+
+NSArray<NSDictionary *> *WCTMatchingContacts(NSArray<NSDictionary *> *contacts,
+                                            NSString *keyword, BOOL pinyin, BOOL fuzzy) {
     NSArray *fields = pinyin
         ? @[@"id",@"nickname",@"remark",@"alias",@"remarkPinyin",@"remarkInitials",@"nicknamePinyin",@"nicknameInitials"]
         : @[@"id",@"nickname",@"remark",@"alias"];
@@ -32,6 +38,5 @@ NSArray<NSDictionary *> *WCTSearchContacts(NSArray<NSDictionary *> *contacts,
         NSComparisonResult result = [a[@"title"] localizedStandardCompare:b[@"title"]];
         return result == NSOrderedSame ? [a[@"id"] compare:b[@"id"]] : result;
     }];
-    if (items.count > limit) [items removeObjectsInRange:NSMakeRange(limit, items.count-limit)];
     return [items copy];
 }

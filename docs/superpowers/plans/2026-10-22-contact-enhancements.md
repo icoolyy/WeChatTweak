@@ -36,10 +36,10 @@
 
 **Interfaces:** doctor JSON 增加 `distribution: "appStore" | "unknown"` 和 `automaticUpdates: { status: "managedByAppStore" | "unsupported", independentlyBlocked: false }`。receipt 只证明当前检测到渠道，不证明阻止更新。
 
-- [ ] 写失败测试：有/无 `_MASReceipt/receipt`、异常 receipt 路径、旧 doctor JSON；断言缺字段兼容、默认不声明阻止更新。
-- [ ] 运行对应 Swift 与 Raycast 测试，确认新增断言先失败。
-- [ ] 实现只读渠道检测、管理页说明；静态检查当前内部更新入口并记录证据。纠正269602过时说明，保留防撤回/多开真实验收未完成状态。
-- [ ] 运行 `rtk proxy /tmp/wechattweak-run` 和 raycast 内 `rtk proxy npm test`，通过后提交 `fix: report App Store update limitations accurately`。
+- [x] 写失败测试：有/无 `_MASReceipt/receipt`、异常 receipt 路径、旧 doctor JSON；断言缺字段兼容、默认不声明阻止更新。
+- [x] 运行对应 Swift 与 Raycast 测试，确认新增断言先失败。
+- [x] 实现只读渠道检测、管理页说明；静态检查当前内部更新入口并记录证据。纠正269602过时说明，保留防撤回/多开真实验收未完成状态。
+- [x] 运行 `rtk proxy /tmp/wechattweak-run` 和 raycast 内 `rtk proxy npm test`，通过后提交 `fix: report App Store update limitations accurately`。
 
 ### Task 2: 原生身份研究与鉴权账号上下文
 
@@ -104,3 +104,10 @@
 - [ ] 顺序运行 `rtk proxy make test SWIFT=/tmp/wechattweak-swift`、`rtk proxy make build SWIFT=/tmp/wechattweak-swift`、`rtk proxy python3 tools/test_cli.py dist/wechattweak`；Raycast 内运行 test、typecheck、lint、build。Swift 构建不并发。
 - [ ] 对最终代码进行一次独立整体审查，修复重要问题并只重跑相关检查；正式微信替换安装和重启需协调，不自动推送。
 - [ ] 交付准确的实现/验证清单及用户最终操作步骤；原生验证不足的项列为未完成，不宣称全量支持。
+
+## Execution status — 2026-10-22
+
+- Task 1 已实现并通过23项 Swift、16项 Raycast 回归、CLI 集成、typecheck/lint/build；真实 doctor 检查确认 App Store 渠道、补丁已应用、现有桥接可用。
+- Task 2 静态账号候选和临时副本探针已准备；当前 Mac 锁屏，等待用户解锁并批准本次临时副本会话验证。正式安装和正在运行的正式微信未改动。
+- Task 4 已提前完成纯分页核心及8套原生测试，含235条分页和独立 HMAC 向量；尚未连接 HTTP 或 Raycast，不视为分页功能已交付。
+- Task 3、5、6 仍需账号身份和各自原生证据；没有开放未经验证的持久化、真实头像或快捷链接。

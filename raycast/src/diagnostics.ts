@@ -53,9 +53,9 @@ export function parseDiagnosis(text: string): Diagnosis {
     throw new Error("CLI 诊断协议不兼容，请选择本分支构建的 dist/wechattweak");
   }
   let app: Diagnosis["app"];
-  const distribution = value.distribution ?? "unknown";
-  const updates = value.automaticUpdates ?? { status: "unsupported", independentlyBlocked: false };
-  if (!["appStore", "unknown"].includes(String(distribution)) || !object(updates) ||
+  const distribution = value.distribution === undefined ? "unknown" : value.distribution;
+  const updates = value.automaticUpdates === undefined ? { status: "unsupported", independentlyBlocked: false } : value.automaticUpdates;
+  if (typeof distribution !== "string" || !["appStore", "unknown"].includes(distribution) || !object(updates) ||
     updates.independentlyBlocked !== false || updates.status !== (distribution === "appStore" ? "managedByAppStore" : "unsupported")) {
     throw new Error("CLI 返回了无效的自动更新能力信息");
   }

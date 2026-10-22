@@ -42,6 +42,9 @@ test("update diagnosis defaults safely for older CLI and validates new fields", 
     { ...current, automaticUpdates: { status: "managedByAppStore", independentlyBlocked: "false" } },
     { ...current, distribution: "unknown" },
     { ...current, automaticUpdates: undefined },
+    { ...current, distribution: ["appStore"] },
+    { ...report(), distribution: null },
+    { ...report(), automaticUpdates: null },
   ]) assert.throws(() => parseDiagnosis(JSON.stringify(invalid)));
 });
 
