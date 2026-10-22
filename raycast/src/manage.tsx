@@ -2,6 +2,7 @@ import { Action, ActionPanel, Color, getPreferenceValues, Icon, List } from "@ra
 import { useCallback, useEffect, useState } from "react";
 import { homebrewPath, readDiagnosis } from "./diagnostics.ts";
 import type { Diagnosis } from "./diagnostics.ts";
+import { BridgeClient } from "./bridge.ts";
 
 const patchLabels: Record<string, string> = {
   ready: "预检通过，尚未应用", applied: "字节补丁已应用", partiallyApplied: "部分字节已应用",
@@ -9,16 +10,20 @@ const patchLabels: Record<string, string> = {
 };
 
 export default function Manage() {
-  const { cliPath } = getPreferenceValues<{ cliPath: string }>();
+  const { cliPath, credentialPath } = getPreferenceValues<{ cliPath: string; credentialPath?: string }>();
   const [report, setReport] = useState<Diagnosis>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [bridge, setBridge] = useState("检查中");
   const refresh = useCallback(async () => {
     setLoading(true); setError(undefined);
+    const bridgeCheck = new BridgeClient(credentialPath).health().then((health) => {
+      setBridge(health.capabilities.contacts && health.capabilities.openChat ? "可用：已验证桥接身份，搜索范围为已加载联系人" : `微信状态：${health.state}`);
+    }).catch((error: unknown) => setBridge(error instanceof Error ? error.message : String(error)));
     try { setReport(await readDiagnosis(cliPath)); }
     catch (error) { setReport(undefined); setError(String(error)); }
-    finally { setLoading(false); }
-  }, [cliPath]);
+    finally { await bridgeCheck; setLoading(false); }
+  }, [cliPath, credentialPath]);
   useEffect(() => { void refresh(); }, [refresh]);
   const brew = homebrewPath();
   const actions = (
@@ -38,9 +43,9 @@ export default function Manage() {
       {report && <List.Section title="独立能力状态">
         <List.Item title="二进制补丁" subtitle={patchLabels[report.patchState] ?? report.patchState} icon={Icon.Hammer} actions={actions} />
         <List.Item title="配置包含的功能" subtitle={report.configuredFeatures.join("、") || "无"} actions={actions} />
-        <List.Item title="联系人搜索与打开聊天" subtitle={report.contactsBridgeAvailable ? "CLI 报告可用；需配套桥接客户端" : "尚未提供微信 4 的原生适配器"} icon={{ source: Icon.Info, tintColor: Color.Orange }} actions={actions} />
         <List.Item title="验证范围" subtitle="预检与补丁字节状态不代表已完成真实消息和会话验收" actions={actions} />
       </List.Section>}
+      <List.Item title="联系人搜索与打开聊天" subtitle={bridge} icon={{ source: Icon.Info, tintColor: Color.Orange }} actions={actions} />
       {report?.errors.map((message, index) => <List.Item key={index} title="诊断错误" subtitle={message} icon={Icon.Warning} actions={actions} />)}
     </List>
   );

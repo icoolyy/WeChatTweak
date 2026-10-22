@@ -11,6 +11,12 @@
   ],
   "commands": [
     {
+      "name": "search",
+      "title": "Search WeChat Contacts",
+      "description": "Search loaded WeChat contacts and open a confirmed chat",
+      "mode": "view"
+    },
+    {
       "name": "manage",
       "title": "Check WeChatTweak Compatibility",
       "description": "Inspect CLI, WeChat patch and contacts capability independently",
@@ -24,10 +30,17 @@
       "required": true,
       "title": "WeChatTweak CLI Path",
       "description": "Absolute path to this branch's dist/wechattweak. Official 2.0.1 lacks the doctor command."
+    },
+    {
+      "name": "credentialPath",
+      "type": "textfield",
+      "required": false,
+      "title": "Bridge Credential Path",
+      "description": "Leave blank for ~/Library/Application Support/WeChatTweak/bridge-token. Development may use an explicit private token file."
     }
   ],
   "scripts": {
-    "test": "node --experimental-strip-types --test src/diagnostics.test.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "build": "ray build -e dist -o dist",
