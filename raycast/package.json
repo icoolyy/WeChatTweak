@@ -1,25 +1,26 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "wechattweak-diagnostics",
-  "title": "WeChatTweak Diagnostics",
-  "description": "Inspect modern WeChatTweak compatibility and explain unavailable contact capabilities.",
-  "icon": "icon.svg",
-  "author": "icoolyy",
+  "name": "wechat",
+  "title": "WeChat",
+  "description": "WeChat contacts, pinned and recent chats, adapted to the verified WeChatTweak bridge",
+  "icon": "wechat.png",
+  "author": "raffeyang",
   "license": "AGPL-3.0-only",
   "categories": [
-    "Developer Tools"
+    "Communication"
   ],
   "commands": [
     {
-      "name": "search",
-      "title": "Search WeChat Contacts",
-      "description": "Search loaded WeChat contacts and open a confirmed chat",
+      "name": "index",
+      "title": "Search Contacts and Chat",
+      "subtitle": "WeChat",
+      "description": "A Raycast extension for WeChat  to quickly search your contacts and chat",
       "mode": "view"
     },
     {
-      "name": "manage",
-      "title": "Check WeChatTweak Compatibility",
-      "description": "Inspect CLI, WeChat patch and contacts capability independently",
+      "name": "manageTweak",
+      "title": "Manage WeChatTweak",
+      "description": "Inspect compatibility, install this branch bridge or restore a verified backup",
       "mode": "view"
     }
   ],
@@ -37,6 +38,20 @@
       "required": false,
       "title": "Bridge Credential Path",
       "description": "Leave blank for ~/Library/Application Support/WeChatTweak/bridge-token. Development may use an explicit private token file."
+    },
+    {
+      "name": "appPath",
+      "type": "textfield",
+      "required": false,
+      "title": "WeChat App Path",
+      "description": "Leave blank for /Applications/WeChat.app. Used for CLI diagnostics and installation."
+    },
+    {
+      "name": "backupPath",
+      "type": "textfield",
+      "required": false,
+      "title": "Restore Backup Path",
+      "description": "Exact absolute backup directory printed by patch; contains original.app and manifest.json."
     }
   ],
   "scripts": {
@@ -60,5 +75,10 @@
   "type": "module",
   "engines": {
     "node": ">=22.6.0"
-  }
+  },
+  "contributors": [
+    "JokeNeverSOke",
+    "litomore",
+    "icoolyy"
+  ]
 }

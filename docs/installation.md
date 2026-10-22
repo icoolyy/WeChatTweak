@@ -62,11 +62,11 @@ npm --prefix raycast run build
 npm --prefix raycast run dev
 ```
 
-Node 需要 22.6 或更新版本。`build` 仅构建到仓库内；`dev` 将开发扩展载入 Raycast。在扩展偏好设置中将 **WeChatTweak CLI Path** 设为本仓库 `dist/wechattweak` 的绝对路径，**Bridge Credential Path** 留空使用默认位置（开发验证可填私有凭证文件的绝对路径）。
+Node 需要 22.6 或更新版本。`build` 仅构建到仓库内；`dev` 将开发扩展载入 Raycast。主扩展已基于 `raycast/upstream-wechat` 的原始源码适配，入口为 `raycast/`，原始子目录仅留作来源快照。在扩展偏好设置中将 **WeChatTweak CLI Path** 设为本仓库 `dist/wechattweak` 的绝对路径，**Bridge Credential Path** 留空使用默认位置（开发验证可填私有凭证文件的绝对路径）。
 
-使用 **Search WeChat Contacts** 搜索昵称、备注、微信号或拼音，Enter 打开选中会话；实际选中目标后才报告成功。最多返回 100 条；尚未加载到微信缓存的联系人不会出现。界面使用默认头像，无头像下载。
+使用 **Search Contacts and Chat** 搜索昵称、备注、微信号或拼音，Enter 打开选中会话；实际选中目标后才报告成功。最多返回 100 条；尚未加载到微信缓存的联系人不会出现。界面使用默认头像，无头像下载。支持置顶和最近10条联系人，均绑定当前桥接会话，世代变化后不复用旧结果。
 
-使用 **Check WeChatTweak Compatibility** 分别查看 Homebrew、CLI、微信版本、字节补丁和桥接状态。停用旧 WeChat 扩展的 **Search Contacts and Chat**、旧 **Manage WeChatTweak**，避免旧扩展继续发起无鉴权请求。旧扩展不能直接复用新的私有接口。
+使用 **Manage WeChatTweak** 分别查看 Homebrew、CLI、微信版本、字节补丁和桥接状态。在 Raycast 设置中启用带本地开发标识的适配版 WeChat，停用旧商店 WeChat；二者命令同名。旧扩展不能直接复用新的私有接口。之前的独立 WeChatTweak Diagnostics 已被本扩展替换。
 
 客户端先通过随机挑战校验服务身份，确认成功后才发送 Authorization Bearer 凭证。微信重启或会话变化会拒绝旧搜索结果，需重新搜索；不要回退到无鉴权访问。
 

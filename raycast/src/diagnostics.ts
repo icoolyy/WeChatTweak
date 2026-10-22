@@ -63,11 +63,12 @@ export function parseDiagnosis(text: string): Diagnosis {
     contactsBridgeReason: value.contactsBridgeReason, errors: value.errors, app };
 }
 
-export async function readDiagnosis(cliPath: string): Promise<Diagnosis> {
+export async function readDiagnosis(cliPath: string, appPath?: string, credentialPath?: string): Promise<Diagnosis> {
   if (!isAbsolute(cliPath)) throw new Error("CLI 必须使用绝对路径");
   if (!findExecutable([cliPath])) throw new Error("CLI 不存在或不可执行，请选择本分支构建的 dist/wechattweak");
   return new Promise((resolve, reject) => {
-    execFile(cliPath, ["doctor", "--json"], { encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024 }, (error, stdout) => {
+    const args = ["doctor", "--json", ...(appPath ? ["--app", appPath] : []), ...(credentialPath ? ["--credential-file", credentialPath] : [])];
+    execFile(cliPath, args, { encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024 }, (error, stdout) => {
       try {
         const report = parseDiagnosis(stdout);
         if (error && report.errors.length === 0) throw error;
