@@ -2,6 +2,25 @@ import Foundation
 import WeChatTweakCore
 
 final class AppInfoTests {
+    func testDistributionRequiresRegularReceipt() throws {
+        let app = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: app) }
+        let directory = app.appendingPathComponent("Contents/_MASReceipt")
+        let receipt = directory.appendingPathComponent("receipt")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try checkEqual(AppInfo.distribution(app: app), "unknown")
+        try Data([1]).write(to: receipt)
+        try checkEqual(AppInfo.distribution(app: app), "appStore")
+        try FileManager.default.removeItem(at: receipt)
+        try FileManager.default.createSymbolicLink(at: receipt, withDestinationURL: URL(fileURLWithPath: "/etc/hosts"))
+        try checkEqual(AppInfo.distribution(app: app), "unknown")
+        try FileManager.default.removeItem(at: receipt)
+        try FileManager.default.createDirectory(at: receipt, withIntermediateDirectories: false)
+        try checkEqual(AppInfo.distribution(app: app), "unknown")
+        try FileManager.default.removeItem(at: directory)
+        try FileManager.default.createSymbolicLink(at: directory, withDestinationURL: app.deletingLastPathComponent())
+        try checkEqual(AppInfo.distribution(app: app), "unknown")
+    }
     func testReadsBuildWithoutGUISession() throws {
         let app = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + " Test WeChat.app")
         defer { try? FileManager.default.removeItem(at: app) }

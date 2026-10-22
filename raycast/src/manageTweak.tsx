@@ -71,6 +71,11 @@ export default function ManageTweak() {
     <List.Section title="微信与桥接状态">
       <List.Item title="WeChat Installation" subtitle={report?.app ? `${report.app.displayVersion} (${report.app.build}) · ${values.appPath}` : hasApp ? values.appPath : "应用不存在"} actions={actions} />
       <List.Item title="字节补丁" subtitle={report ? labels[report.patchState] ?? report.patchState : "无法检查"} actions={actions} />
+      <List.Item title="安装渠道" subtitle={report?.distribution === "appStore" ? "检测到 App Store receipt" : "未确认；需要新版 CLI 诊断"} actions={actions} />
+      <List.Item title="自动更新" subtitle={report?.automaticUpdates.status === "managedByAppStore" ? "由 App Store 管理；尚不支持单独阻止微信更新" : "尚未验证可用的自动更新阻止能力"} actions={<ActionPanel>
+        <Action.OpenInBrowser title="查看 App Store 自动更新设置说明" url="https://support.apple.com/en-gb/guide/app-store/mchlp2257/mac" />
+        <Action title="刷新状态" onAction={refresh} />
+      </ActionPanel>} />
       <List.Item title="桥接库文件" subtitle={hasPayload ? "目标应用中存在" : "目标应用中未找到"} actions={actions} />
       <List.Item title="运行中的桥接" subtitle={health ? `身份已验证 · ${health.state}` : bridgeError ?? "检查中"} actions={actions} />
       <List.Item title="联系人搜索和打开会话" subtitle={healthy ? "可用；搜索微信已加载的缓存" : "暂不可用，请先启动已安装桥接的微信并登录"}

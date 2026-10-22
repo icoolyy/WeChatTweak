@@ -30,6 +30,21 @@ test("CLI installation and contact capability remain distinct", () => {
   assert.equal(result.pendingWrites, 2);
 });
 
+test("update diagnosis defaults safely for older CLI and validates new fields", () => {
+  const legacy = parseDiagnosis(JSON.stringify(report()));
+  assert.equal(legacy.distribution, "unknown");
+  assert.deepEqual(legacy.automaticUpdates, { status: "unsupported", independentlyBlocked: false });
+  const current = { ...report(), distribution: "appStore", automaticUpdates: { status: "managedByAppStore", independentlyBlocked: false } };
+  assert.equal(parseDiagnosis(JSON.stringify(current)).automaticUpdates.status, "managedByAppStore");
+  for (const invalid of [
+    { ...current, distribution: "website" },
+    { ...current, automaticUpdates: { status: "blocked", independentlyBlocked: true } },
+    { ...current, automaticUpdates: { status: "managedByAppStore", independentlyBlocked: "false" } },
+    { ...current, distribution: "unknown" },
+    { ...current, automaticUpdates: undefined },
+  ]) assert.throws(() => parseDiagnosis(JSON.stringify(invalid)));
+});
+
 test("reject wrong protocol, HTML and incomplete or malformed responses", () => {
   for (const value of ["<html>another server</html>", "{}", JSON.stringify({ ...report(), schemaVersion: 2 }),
     JSON.stringify({ ...report(), contactsBridgeAvailable: "yes" }), JSON.stringify({ ...report(), pendingWrites: -1 }),

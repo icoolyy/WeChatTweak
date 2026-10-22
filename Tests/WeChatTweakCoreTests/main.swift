@@ -13,6 +13,7 @@ func checkEqual<T: Equatable>(_ actual: T, _ expected: T, file: StaticString = #
     throw TestFailure(description: "\(file):\(line): expected an error")
 }
 let tests: [(String, () throws -> Void)] = [
+    ("distribution requires regular receipt", AppInfoTests().testDistributionRequiresRegularReceipt),
     ("reads build without GUI", AppInfoTests().testReadsBuildWithoutGUISession),
     ("rejects malformed plist", AppInfoTests().testRejectsMissingOrMalformedPlist),
     ("config beside executable", ConfigTests().testDefaultConfigUsesExecutableDirectory),

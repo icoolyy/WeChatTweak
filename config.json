@@ -308,7 +308,7 @@
     "version": "269602",
     "verification": {
       "originalBytes": "verified against local arm64 Resources/wechat.dylib",
-      "runtime": "not yet verified; contacts bridge unavailable",
+      "runtime": "contacts bridge search and confirmed open verified on App Store 4.1.13 arm64; revoke and multiInstance behavior not yet verified; App Store automatic updates not independently blocked",
       "source": "https://github.com/sunnyyoung/WeChatTweak/pull/1042"
     },
     "targets": [

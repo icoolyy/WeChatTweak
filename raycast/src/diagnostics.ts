@@ -12,6 +12,8 @@ export interface Diagnosis {
   contactsBridgeAvailable: boolean;
   contactsBridgeReason?: string;
   errors: string[];
+  distribution: "appStore" | "unknown";
+  automaticUpdates: { status: "managedByAppStore" | "unsupported"; independentlyBlocked: false };
   app?: { displayVersion: string; build: string; bundleID: string };
 }
 
@@ -51,6 +53,12 @@ export function parseDiagnosis(text: string): Diagnosis {
     throw new Error("CLI 诊断协议不兼容，请选择本分支构建的 dist/wechattweak");
   }
   let app: Diagnosis["app"];
+  const distribution = value.distribution ?? "unknown";
+  const updates = value.automaticUpdates ?? { status: "unsupported", independentlyBlocked: false };
+  if (!["appStore", "unknown"].includes(String(distribution)) || !object(updates) ||
+    updates.independentlyBlocked !== false || updates.status !== (distribution === "appStore" ? "managedByAppStore" : "unsupported")) {
+    throw new Error("CLI 返回了无效的自动更新能力信息");
+  }
   if (value.app !== undefined) {
     if (!object(value.app) || typeof value.app.displayVersion !== "string" || typeof value.app.build !== "string" || typeof value.app.bundleID !== "string") {
       throw new Error("CLI 返回了无效的微信版本信息");
@@ -60,7 +68,8 @@ export function parseDiagnosis(text: string): Diagnosis {
   return { schemaVersion: 1, cliVersion: value.cliVersion, patchState: value.patchState,
     pendingWrites: value.pendingWrites, alreadyPatched: value.alreadyPatched,
     configuredFeatures: value.configuredFeatures, contactsBridgeAvailable: value.contactsBridgeAvailable,
-    contactsBridgeReason: value.contactsBridgeReason, errors: value.errors, app };
+    contactsBridgeReason: value.contactsBridgeReason, errors: value.errors, app,
+    distribution: distribution as Diagnosis["distribution"], automaticUpdates: updates as Diagnosis["automaticUpdates"] };
 }
 
 export async function readDiagnosis(cliPath: string, appPath?: string, credentialPath?: string): Promise<Diagnosis> {

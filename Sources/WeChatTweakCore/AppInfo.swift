@@ -11,6 +11,19 @@ public struct AppInfo: Codable, Equatable, Sendable {
     public let build: String
     public let bundleID: String
 
+    // Receipt presence identifies the observed distribution only. It does not
+    // authenticate the receipt or imply that App Store updates are blocked.
+    public static func distribution(app: URL) -> String {
+        var current = app
+        for component in ["Contents", "_MASReceipt", "receipt"] {
+            current.appendPathComponent(component)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: current.path),
+                  let type = attributes[.type] as? FileAttributeType,
+                  type == (component == "receipt" ? .typeRegular : .typeDirectory) else { return "unknown" }
+        }
+        return "appStore"
+    }
+
     public static func read(app: URL) throws -> AppInfo {
         let data = try Data(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
         guard let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],

@@ -52,6 +52,8 @@ struct Tweak: AsyncParsableCommand {
             var report = Diagnostic(appPath: options.appURL.path)
             do {
                 report.app = try AppInfo.read(app: options.appURL)
+                report.distribution = AppInfo.distribution(app: options.appURL)
+                report.automaticUpdates = UpdateDiagnosis(status: report.distribution == "appStore" ? "managedByAppStore" : "unsupported")
                 let source = try options.configURL()
                 report.configSource = source.absoluteString
                 let configs = try await Config.load(url: source)
@@ -74,6 +76,7 @@ struct Tweak: AsyncParsableCommand {
                 print("App: \(report.appPath)")
                 if let app = report.app { print("WeChat: \(app.displayVersion) (\(app.build))") }
                 print("Config: \(report.configSource ?? "unavailable")")
+                print("Distribution: \(report.distribution); automatic updates: \(report.automaticUpdates.status); independently blocked: false")
                 print("Patch state: \(report.patchState); pending writes: \(report.pendingWrites)")
                 print("Configured features: \(report.configuredFeatures.joined(separator: ", "))")
                 print("Original-byte verification missing for \(report.unverifiedLegacyEntries) legacy entries")
@@ -133,11 +136,18 @@ struct Tweak: AsyncParsableCommand {
     }
 }
 
+struct UpdateDiagnosis: Encodable {
+    let status: String
+    let independentlyBlocked = false
+}
+
 struct Diagnostic: Encodable {
     let schemaVersion = 1
     let cliVersion = "2.1.0-dev"
     let appPath: String
     var app: AppInfo?
+    var distribution = "unknown"
+    var automaticUpdates = UpdateDiagnosis(status: "unsupported")
     var configSource: String?
     var patchState = "unknown"
     var configuredFeatures: [String] = []
