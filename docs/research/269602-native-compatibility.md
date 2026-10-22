@@ -70,6 +70,35 @@ WCContactData=0
 
 因此计划 Task 4 的完整门槛没有通过，Task 5 未实现。未启动 `48065` 服务、未创建凭据或启动项、未用空联系人/模拟数据返回成功。Raycast 当前交付独立诊断功能；完整搜索与打开聊天仍未完成。
 
+## 继续定位：Qt 元数据与只读对象探针
+
+新增可复现的离线工具 `Native/Research/inspect_269602.py`，先校验整个原始模块 SHA-256，再解析 arm64 的 Qt 元数据、`LC_FUNCTION_STARTS` 和候选虚表。真实模块执行输出为：
+
+```text
+Parsed metaobjects 1294
+function starts 373953 metaObject implementations 1216
+mapped mmui vtables 1341
+```
+
+输出不含账号数据。工具拒绝 SHA 不匹配的文件，且不覆盖已有输出目录。以下是后续运行时探针使用的静态对应关系，不是可调用 ABI：
+
+| 类型/候选 | 虚表 VA | 元对象 VA / 证据 |
+|---|---|---|
+| WeChatApplication | `0x95a38e0` | `0x9596d38` |
+| ContactServiceWrapper | `0x95e6960` | `0x959a9c8` |
+| ContactsManagerDetailModel | `0x95eae30` | `0x959ade8` |
+| MainWindow | `0x9605c90` | `0x959c648` |
+| SearchContentView | `0x961baa0` | `0x959d9c8` |
+| ContactService 析构候选 | `0x9878088` | `0x3b6e248` 的析构日志及 vptr 写入；构造候选 `0x3b6dd64` |
+
+`GetContactList` 日志引用对应函数 `0x27cf52c`。反汇编显示它遍历输入的名字容器、查询缓存并构建结果集合；不能把它直接当成全量联系人枚举。搜索得到的 `GetAllContactLab…` 在引用处构造的是标签相关名称，也不能作为全量联系人接口的证明。Qt 中 `GotoChatAndCloseSPWindow` 为 signal，其生成代码调用 `QMetaObject::activate`，不能把发射此信号等同于成功打开聊天。
+
+原生 C++ RTTI 类型名大量被替换为散列样式名称，仅按可读 `ContactService` 搜索 RTTI 会漏检；Qt 元数据与指令引用是当前更可靠的定位线索。另核对了 MIT 项目 macfriends-cli，其原生适配器仍返回 fixture 与 `contacts_primitive_unresolved`，未将它当成真实实现复用。
+
+新增 `Native/Probes/object_inventory.c` 和堆扫描测试。探针等待 30 秒，在匹配 arm64 UUID `CDB81058-0FAC-3518-95F5-C0CC7860F9B5` 后只统计候选虚表，不调用对象方法、不输出联系人或内存地址。测试覆盖普通对象、控制块后对象、释放后排除、缺少匹配模块、0600 输出、拒绝覆盖文件及跟随符号链接；`rtk proxy python3 tools/test_native_probes.py` 全部通过。控制块后的对象测试先复现漏检（3/4），修正后为 4/4，释放后为 0。
+
+真实运行时验证准备在 `/tmp/wechattweak-runtime-inventory/WeChat.app` 的重签副本进行，该副本已通过 `codesign --verify --deep --strict`，原安装未改动。此探针尚未注入真实微信：需要先正常退出当前微信，避免同账号并发，再启动临时副本。已向用户提出本次会话控制选择，未收到选择前不执行退出、启动或登录操作。真实联系人枚举和打开聊天仍未验收。
+
 ## 构建环境记录
 
 本机 CLT 存在三项基线问题：SwiftPM 私有接口与动态库不一致、重复 `SwiftBridging` module map，以及没有 XCTest。系统工具链文件未被修改；验证通过临时复制的 ManifestAPI/PluginAPI 接口、VFS overlay 和任务内缓存进行。回归套件使用真实 Swift 核心代码及独立可执行测试程序，不依赖 XCTest。
