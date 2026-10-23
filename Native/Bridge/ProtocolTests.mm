@@ -12,6 +12,10 @@ int main(void) { @autoreleasepool {
         (void)args;(void)context;++calls;
         if([name isEqual:@"health"]) return @{@"state":@"ready",@"build":@"269602",@"session":@"fixture-1",
             @"capabilities":@{@"contacts":@YES,@"openChat":@YES},@"privateAccount":@"must not leak"};
+        if([name isEqual:@"avatar"]) {
+            check([args[@"id"] isEqual:@"fixture_id"] && [args[@"expectedSession"] isEqual:@"fixture-1"],"avatar epoch arguments");
+            return @{@"ok":@YES,@"id":@"fixture_id",@"session":@"fixture-1",@"mime":@"image/png",@"data":@"aGVsbG8=",@"digest":[@"a" stringByPaddingToLength:64 withString:@"a" startingAtIndex:0]};
+        }
         if([name isEqual:@"open"]) return @{@"ok":@YES,@"confirmed":@YES};
         return @{@"ok":@YES,@"session":@"fixture-1",@"items":@[@{@"title":@"Fixture",@"arg":@"fixture_id"}]};
     };
@@ -28,6 +32,12 @@ int main(void) { @autoreleasepool {
         check([health.body[@"capabilities"][key] isEqual:@NO],"unverified enhanced capabilities default unavailable");
     WCTHTTPReply *search=request(@"/wechat/search?keyword=fixture&usePinyin=1&fuzzy=1",@"",YES);
     check(search.status==200 && [search.body[@"items"] count]==1,"authenticated real operation dispatch");
+    check(request(@"/wechat/avatar?id=fixture_id&epoch=fixture-1",@"",YES).status==200,"authenticated avatar route");
+    check(request(@"/wechat/avatar?id=fixture_id&epoch=fixture-1",@"",NO).status==401,"avatar requires authentication");
+    check(request(@"/wechat/avatar?id=fixture_id",@"",YES).status==400,"avatar requires epoch");
+    check(request(@"/wechat/avatar?id=fixture_id&epoch=fixture-1&path=/tmp/test",@"",YES).status==400,"avatar refuses file paths");
+    check(request(@"/wechat/avatar?id=fixture_id&id=other&epoch=fixture-1",@"",YES).status==400,"avatar refuses duplicate IDs");
+    check(request(@"/wechat/avatar?id=%0A&epoch=fixture-1",@"",YES).status==400,"avatar refuses control characters");
     unsigned before=calls;
     check(request(@"/wechat/search",@"",NO).status==401,"unauthenticated legacy request rejected");
     check(calls==before,"unauthorized never reaches adapter");

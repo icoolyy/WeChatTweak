@@ -1,11 +1,20 @@
+import { AvatarLoader } from "./avatarLoader.ts";
 import type { BridgeClient } from "../bridge.ts";
 import type { SearchResult } from "../types/index.ts";
 
 export class ContactService {
   private bridge: Pick<BridgeClient, "search" | "open">;
-  constructor(bridge: Pick<BridgeClient, "search" | "open">) { this.bridge = bridge; }
+  private avatars: AvatarLoader;
+  constructor(bridge: Pick<BridgeClient, "search" | "open"> & Partial<Pick<BridgeClient, "avatar">>) {
+    this.bridge = bridge; this.avatars = new AvatarLoader((id, session, signal) => bridge.avatar?.(id, session, signal) ?? Promise.resolve(undefined));
+  }
+  avatar(contact: SearchResult, signal: AbortSignal): Promise<string | undefined> {
+    return this.avatars.load(contact.id, contact.session, signal);
+  }
   async searchContacts(keyword: string, signal: AbortSignal): Promise<{ items: SearchResult[]; session: string }> {
     const result = await this.bridge.search(keyword, signal);
+    if (signal.aborted) throw new Error("Search aborted");
+    this.avatars.activate(result.session);
     const items = result.items.map((item) => ({ ...item, subtitle: item.subtitle ?? "", session: result.session }));
     if (keyword) {
       const query = keyword.toLocaleLowerCase();

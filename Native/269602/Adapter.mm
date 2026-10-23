@@ -1,6 +1,8 @@
 #import "Adapter.h"
 #import "ContactCache.h"
 #import "ContactSearch.h"
+#import "AvatarCache.h"
+#import "AvatarNative.h"
 #include "Runtime.h"
 #include "NativeMutex.h"
 #include <pthread.h>
@@ -42,7 +44,7 @@ static Status lockStatus(WCTLockResult value) {
 }
 struct Source {
     Status status=Unsupported;
-    uintptr_t base=0,state=0,storage=0;
+    uintptr_t base=0,state=0,storage=0,headStorage=0;
     WCTNativeMutex registryLock,cacheLock;
     Source() {
         if(!pthread_main_np()) {status=WrongThread;return;}
@@ -62,16 +64,18 @@ struct Source {
         if(declared>4096) {status=BadLayout;return;}
         uintptr_t node=WCTReadPointer(factory+0x80);
         NSMutableSet *seen=[NSMutableSet set];
-        unsigned matches=0;
+        unsigned matches=0,heads=0;
         while(node) {
             if(seen.count>=declared || [seen containsObject:@(node)] || node>UINTPTR_MAX-0x38) {status=BadLayout;return;}
             [seen addObject:@(node)];
             uintptr_t value=WCTReadPointer(node+0x28);
             if(value && WCTReadPointer(value)==base+0x98b92d8) {storage=value;++matches;}
+            if(value && WCTReadPointer(value)==base+0x98b9710) {headStorage=value;++heads;}
             node=WCTReadPointer(node);
         }
         if(seen.count!=declared || matches>1) {status=BadLayout;return;}
         if(!storage) {status=NotReady;return;}
+        if(heads!=1) headStorage=0;
         // Nonblocking acquisition avoids an inverse-lock-order deadlock. Hold
         // registry ownership until the copied snapshot no longer needs storage.
         status=lockStatus(cacheLock.acquire(storage+0x130));
@@ -91,14 +95,23 @@ struct Source {
     }
     void unlock() {cacheLock.release();registryLock.release();}
 };
+static NSString *avatarMembershipEpoch;
+static NSSet<NSString*> *avatarMembership;
+static void rememberContacts(NSArray *contacts,NSString *epoch) {
+    NSMutableSet *identifiers=[NSMutableSet new];
+    for(NSDictionary *contact in contacts)if([contact[@"id"] isKindOfClass:NSString.class])[identifiers addObject:contact[@"id"]];
+    avatarMembership=[identifiers copy];avatarMembershipEpoch=[epoch copy];
+}
 static NSString *session(Source &source) {
     static NSString *boot=[[NSUUID UUID] UUIDString];
-    static uintptr_t previousState=0,previousStorage=0;
+    static uintptr_t previousState=0,previousStorage=0,previousHead=0;
     static uint64_t generation=0;
-    if(source.status!=Busy && (source.state!=previousState || source.storage!=previousStorage)) {
-        previousState=source.state;previousStorage=source.storage;++generation;
+    if(source.status!=Busy && (source.state!=previousState || source.storage!=previousStorage || source.headStorage!=previousHead)) {
+        previousState=source.state;previousStorage=source.storage;previousHead=source.headStorage;++generation;
     }
-    return [NSString stringWithFormat:@"%@-%llu",boot,(unsigned long long)generation];
+    NSString *epoch=[NSString stringWithFormat:@"%@-%llu",boot,(unsigned long long)generation];
+    if(![epoch isEqual:avatarMembershipEpoch]){avatarMembership=nil;avatarMembershipEpoch=nil;}
+    WCTAvatarNativeSession(epoch);return epoch;
 }
 static BOOL hasID(NSArray *items,NSString *identifier) {
     for(NSDictionary *item in items) if([item[@"arg"] isEqual:identifier]) return YES;
@@ -112,7 +125,7 @@ char *wct_native_health_json(void) { @autoreleasepool {
     BOOL ready=source.status==Ready;
     return json(@{@"state":source.status==Unsupported?@"unsupported":code(source.status),
         @"session":session(source),@"build":@"269602",@"contactsSource":@"loadedContacts",
-        @"capabilities":@{@"contacts":@(ready),@"openChat":@(ready && WCTViewModel(source.base)!=0)}});
+        @"capabilities":@{@"contacts":@(ready),@"openChat":@(ready && WCTViewModel(source.base)!=0),@"avatars":@(ready)}});
 } }
 
 char *wct_native_search_json(const char *raw,int pinyin,int fuzzy) { @autoreleasepool {
@@ -126,9 +139,50 @@ char *wct_native_search_json(const char *raw,int pinyin,int fuzzy) { @autoreleas
     // All strings are copied before releasing native ownership/locks. Matching
     // and JSON serialization never hold a native object reference.
     NSString *generation=session(source);
+    rememberContacts(contacts,generation);source.unlock();
+    NSArray *items=WCTSearchContacts(contacts,keyword,pinyin!=0,fuzzy!=0,100);
+    NSMutableSet *emitted=[NSMutableSet new];for(NSDictionary *item in items)[emitted addObject:item[@"id"]];
+    WCTAvatarNativeSearchIDs(emitted,generation);
+    return json(@{@"ok":@YES,@"source":@"loadedContacts",@"session":generation,@"items":items});
+} }
+
+char *wct_native_avatar_json(const char *raw,const char *epoch) { @autoreleasepool {
+    if(!pthread_main_np())return failure(@"wrong_thread");
+    NSString *identifier=input(raw,NO),*expected=input(epoch,NO);
+    if(!identifier || !expected || expected.length>128 ||
+       [identifier rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location!=NSNotFound)return failure(@"invalid_query");
+    Source source;
+    if(source.status!=Ready)return failure(code(source.status));
+    NSString *generation=session(source);
+    if(![expected isEqual:generation])return failure(@"stale_session");
+    // Search already copied this epoch's contact IDs. Reuse that owned set so
+    // every availability poll does not traverse all contacts on the UI thread.
+    if(!avatarMembership) {
+        NSArray *contacts=source.snapshot();if(!contacts)return failure(code(source.status));
+        rememberContacts(contacts,generation);
+    }
+    if(![avatarMembership containsObject:identifier])return failure(@"contact_not_found");
+    NSData *data=WCTReadDownloadedAvatar(identifier);
+    if(!data && source.headStorage) {
+        // Copy cache bytes under native ownership, then release every native
+        // lock before resolving disk paths (the resolver takes its own locks).
+        source.cacheLock.release();WCTNativeMutex lock;
+        Status status=lockStatus(lock.acquire(source.headStorage+0x108));
+        if(status!=Ready)return failure(code(status));
+        NSError *error=nil;
+        data=WCTReadCachedAvatar(source.headStorage,identifier,^BOOL(uintptr_t a,void *out,size_t n){return WCTReadBytes(a,out,n);},&error);
+        lock.release();
+        if(error)return failure(@"invalid_native_layout");
+    }
     source.unlock();
-    return json(@{@"ok":@YES,@"source":@"loadedContacts",@"session":generation,
-        @"items":WCTSearchContacts(contacts,keyword,pinyin!=0,fuzzy!=0,100)});
+    NSDictionary *payload=WCTAvatarPayload(data);
+    if(!payload)payload=WCTAvatarPayload(WCTReadNativeAvatarFile(source.base,identifier));
+    if(!payload){
+        WCTRequestNativeAvatar(source.base,identifier);
+        return json(@{@"ok":@NO,@"pending":@(WCTNativeAvatarPending(identifier)),@"error":@{@"code":@"avatar_not_found"}});
+    }
+    NSMutableDictionary *response=[payload mutableCopy];response[@"ok"]=@YES;response[@"id"]=identifier;response[@"session"]=generation;
+    return json(response);
 } }
 
 char *wct_native_request_open_json(const char *raw) { @autoreleasepool {

@@ -7,6 +7,8 @@
 
 static unsigned failures=0, calls=0, opens=0;
 static bool changed=false, selected=false;
+static unsigned avatarCalls=0;
+static bool avatarPending=false;
 static void check(bool value,const char *name) {if(!value){++failures;fprintf(stderr,"FAIL: %s\n",name);}}
 extern "C" char *wct_native_health_json(void) {
     check([NSThread isMainThread],"health main thread");++calls;
@@ -15,6 +17,12 @@ extern "C" char *wct_native_health_json(void) {
 extern "C" char *wct_native_search_json(const char *,int,int) {
     check([NSThread isMainThread],"search main thread");++calls;
     return strdup("{\"ok\":true,\"items\":[]}");
+}
+extern "C" char *wct_native_avatar_json(const char *id,const char *epoch) {
+    check([NSThread isMainThread],"avatar main thread");
+    check(!strcmp(id,"filehelper") && !strcmp(epoch,"epoch1"),"avatar forwards epoch");
+    if(avatarPending && ++avatarCalls<3)return strdup("{\"ok\":false,\"error\":{\"code\":\"avatar_not_found\"}}");
+    return strdup("{\"ok\":true}");
 }
 extern "C" char *wct_native_request_open_json(const char *) {
     check([NSThread isMainThread],"open main thread");++calls;++opens;
@@ -38,6 +46,10 @@ int main() { @autoreleasepool {
         check(calls==0,"expired work skipped");
         WCTOperationContext *shortWait=[[WCTOperationContext alloc] initWithTimeout:0.15];
         check([WCTNativeOperation(@"open",args,shortWait)[@"error"][@"code"] isEqual:@"operation_timeout"],"requested is not confirmation");
+        check([WCTNativeOperation(@"avatar",args,[[WCTOperationContext alloc] initWithTimeout:1])[@"ok"] isEqual:@YES],"avatar dispatched on main thread");
+        avatarPending=true;
+        check([WCTNativeOperation(@"avatar",args,[[WCTOperationContext alloc] initWithTimeout:1])[@"ok"] isEqual:@YES],"missing avatar becomes available without manual refresh");
+        check(avatarCalls==3,"avatar polls until real payload available");
         selected=true;
         check([WCTNativeOperation(@"open",args,[[WCTOperationContext alloc] initWithTimeout:1])[@"confirmed"] isEqual:@YES],"confirmed selection");
         changed=true;

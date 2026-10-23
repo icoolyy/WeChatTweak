@@ -14,9 +14,9 @@ build::
 .PHONY: native
 native:
 	mkdir -p dist
-	clang++ -std=c++17 -arch arm64 -mmacosx-version-min=12.0 -fobjc-arc -dynamiclib -framework Foundation -Wall -Wextra -Werror \
+	clang++ -std=c++17 -arch arm64 -mmacosx-version-min=12.0 -fobjc-arc -dynamiclib -framework Foundation -framework ImageIO -framework CoreGraphics -Wall -Wextra -Werror \
 		Native/Bridge/Protocol.mm Native/Bridge/Credentials.mm Native/Bridge/Server.mm Native/Bridge/NativeOperation.mm Native/Bridge/Host.mm \
-		Native/269602/Adapter.mm Native/269602/ContactCache.mm Native/269602/ContactSearch.mm -o dist/WeChatTweakBridge.dylib
+		Native/269602/Adapter.mm Native/269602/ContactCache.mm Native/269602/ContactSearch.mm Native/269602/AvatarCache.mm Native/269602/AvatarFile.mm Native/269602/AvatarNative.mm Native/269602/AvatarStore.mm Native/269602/AvatarDownload.mm -o dist/WeChatTweakBridge.dylib
 	codesign --force --sign - dist/WeChatTweakBridge.dylib
 
 test:

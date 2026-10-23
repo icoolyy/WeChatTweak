@@ -53,6 +53,20 @@ NSDictionary *WCTNativeOperation(NSString *operation,NSDictionary *arguments,WCT
             return decode(wct_native_search_json([arguments[@"keyword"] UTF8String],
                 [arguments[@"pinyin"] boolValue],[arguments[@"fuzzy"] boolValue]));
         });
+    if([operation isEqual:@"avatar"]) {
+        // Wait off the main thread; every poll revalidates the epoch/contact.
+        // Native scheduling is deduplicated and bounded by the adapter.
+        CFAbsoluteTime end=CFAbsoluteTimeGetCurrent()+MIN(4.0,MAX(0.0,context.timeRemaining-0.1));
+        NSDictionary *result;
+        do {
+            result=onMain(context,^NSDictionary*{
+                return decode(wct_native_avatar_json([arguments[@"id"] UTF8String],[arguments[@"expectedSession"] UTF8String]));
+            });
+            if(![result[@"error"][@"code"] isEqual:@"avatar_not_found"] || [result[@"pending"] isEqual:@NO] || CFAbsoluteTimeGetCurrent()>=end)return result;
+            usleep((useconds_t)(MIN(context.timeRemaining,0.15)*1000000));
+        }while(!context.expired);
+        return failure(@"operation_timeout");
+    }
     if(![operation isEqual:@"open"]) return failure(@"invalid_query");
     NSString *identifier=arguments[@"id"],*expected=arguments[@"expectedSession"];
     NSDictionary *requested=onMain(context,^NSDictionary*{

@@ -99,6 +99,14 @@ with tempfile.TemporaryDirectory(prefix="wct-transport-tests-") as directory:
         ).hexdigest()
         assert hmac.compare_digest(health["proof"], expected), "health proof mismatch"
         epoch = health["session"]
+        avatar_route = "/wechat/avatar?" + urlencode({"id": "fixture_0", "epoch": epoch})
+        assert request(avatar_route, auth=False)[0] == 401
+        status, avatar = request(avatar_route)
+        assert status == 200 and avatar["id"] == "fixture_0" and avatar["session"] == epoch
+        assert request("/wechat/avatar?id=fixture_0&epoch=old")[0] == 409
+        assert request("/wechat/avatar?id=missing&epoch=" + epoch)[0] == 404
+        assert request(avatar_route + "&path=/tmp/avatar.png")[0] == 400
+        print("PASS: authenticated session-bound avatar transport", flush=True)
         for _ in range(10):
             assert request("/wechat/search", auth=False)[0] == 401
             assert (

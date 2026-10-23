@@ -75,16 +75,19 @@
 - [ ] 调查原生加载/查询服务，记录覆盖范围及所有权；未经运行时验证继续使用 `loadedContacts`。若存在已验证全量入口，再补独立测试后声明对应能力。
 - [ ] 运行原生、传输、Raycast 测试及真实超过100条分页验收，通过后提交 `feat: paginate verified contact snapshots`。
 
-### Task 5: 受限本地头像
+### Task 5: 受限本地头像（按用户批准调整为当前会话）
 
-**Files:** 新增 `Native/Research/avatar_cache_269602.md`、`Native/269602/AvatarCache.h/.mm`、`AvatarCacheTests.mm`、`raycast/src/services/avatarCache.ts`；修改 `Native/Bridge/Protocol.mm`、`NativeOperation.mm`、`Server.mm`、`raycast/src/bridge.ts`、`components/searchListltem.tsx`、生产源文件列表和原生测试工具。
+**Files:** `Native/Research/avatar_cache_269602.md`、`Native/269602/AvatarCache.h/.mm`、`AvatarCacheTests.mm`、`raycast/src/services/avatarLoader.ts`；修改 Adapter、鉴权桥接协议/调度、客户端与联系人列表、生产源文件列表及原生测试工具。
 
-**Interfaces:** `WCTReadLocalAvatar(identifier, accountIdentifier)` 只接受已校验联系人/账号，由已验证原生缓存路径解析；鉴权 `GET /wechat/avatar?id=<id>&epoch=<session>` 返回受限 JSON `{ mime: "image/png" | "image/jpeg", data: <base64> }`，解码后上限512KiB；缺失返回404。客户端 `avatar(id, context, signal?)` 输出按 scope 分区的 Raycast 可用缓存文件路径。
+**Interfaces:** `wct_native_avatar_json(id, expectedEpoch)` 只接受当前已校验联系人和桥接epoch，从该账号factory中的HeadCache复制内存；鉴权 `GET /wechat/avatar?id=<id>&epoch=<session>` 返回 `{ok,id,session,mime:"image/png",data,digest}`。原始编码图片上限512KiB，输出最多128像素、128KiB PNG，缺失404。客户端返回校验后的 data URI；只做命令实例内缓存，不保存文件，不依赖尚未验收的跨重启账号作用域。
 
-- [ ] 静态与临时副本验证缓存路径和账号归属，记录证据；无法证明时保留默认图标，明确缺口，不获取任意远端 URL。
-- [ ] 写失败测试：正确账号命中、跨账号拒绝、路径穿越/父目录及末级符号链接拒绝、超限/伪 MIME 拒绝、缓存缺失默认图标；头像请求保持鉴权/期限/响应上限。
-- [ ] 运行测试确认失败，再实现受限读取和客户端缓存；不把文件路径或账户标识暴露在 URL 中。
-- [ ] 运行原生、传输与 Raycast 测试，核对真实头像及缺失回退，通过后提交 `feat: show verified local contact avatars`。
+- [x] 静态与临时副本确认缓存对象、匹配key/记录ID及图片数据；不获取远端URL或解密数据库。
+- [x] 原生缓存损坏/超限/伪图片、鉴权/期限、旧epoch/未知ID/路径参数拒绝，以及客户端完整性/并发/会话清理回归。
+- [x] 失败测试后实现受限读取和内存缓存；独立审查并修复队列名额抢占及旧会话阻塞。
+- [x] 当前微信运行时读取、真实桥接拒绝用例、Raycast实际显示与缺失回退验收。
+- [ ] 正式安装升级桥接库（本轮仅获准临时副本验证及恢复正式微信）。
+
+跨账号真人验收仍缺第二账号，不声称已经完成；跨重启头像复用、全量头像和下载策略不在当前实现范围。
 
 ### Task 6: 可撤销安全快捷链接
 
@@ -112,3 +115,32 @@
 - Task 4 已提前完成纯分页核心及8套原生测试，含235条分页和独立 HMAC 向量；尚未连接 HTTP 或 Raycast，不视为分页功能已交付。
 - Task 3、5、6 仍需账号身份和各自原生证据；没有开放未经验证的持久化、真实头像或快捷链接。
 - 补充健康协议增强能力白名单与旧桥接默认关闭行为；Raycast 管理页明确展示会话内记录、最多100条、缓存范围、默认头像和持久链接尚未开放。
+
+
+### 当前会话头像实施进展（2026-10-22）
+
+用户已同意 Task 5 先按当前桥接 epoch 实现，不以跨重启账号作用域或第二测试账号作为前提；这不开放持久化或快捷链接。当前实现从原生内存缓存复制编码图片，故没有文件路径解析或符号链接访问。输出统一为最多128像素、128KiB PNG，并附SHA-256；Raycast 使用命令内有界内存缓存和受限并发，图片源为 data URI，2026-10-23已通过真实显示验收。
+
+- [x] 原生缓存遍历、所有权复制、图片类型/大小/缩略图回归。
+- [x] 鉴权头像接口、期限、参数/epoch约束和真实传输回归。
+- [x] 客户端完整性验证、默认回退、有界缓存、并发和会话变化回归。
+- [x] 独立审查并修复队列名额抢占与旧会话阻塞。
+- [x] 临时微信真实缓存命中与精确ID约束验收（未逐一人工核对所有联系人）。
+- [x] Raycast真实图片显示与缺失回退验收。
+- [ ] 验收后更新已安装桥接及可用性文档。
+
+证据、限制与待验收假设见 `Native/Research/avatar_cache_269602.md`。当前会话头像已通过临时副本运行时验收；正式安装仍需升级桥接，不把它等同于全量或跨账号验收。
+
+
+### 完整头像后续验证（2026-10-23）
+
+- [x] 当前账号原生路径解析与受限文件读取，新增路径/符号链接/大小fixture。
+- [x] 原生回调调度与实际执行计数验证；缺失头像等待回归。
+- [x] 修复轮询重复复制全联系人导致的主线程负担。
+- [x] 用户授权的3个缺失头像HTTPS下载均返回有效图片。
+- [x] 独立下载组件离线测试：域名/HTTPS、HTTP失败、非图片、流式超限。
+- [x] 当前搜索结果直接下载范围授权（2026-10-23用户明确允许）。
+- [x] 下载组件接入、当前搜索结果ID限制、全局并发/去重/epoch取消、批量真实验收与Raycast最终验收：最终构建100条中77张可用、23回退、0接口错误。
+- [x] 临时副本正常退出、普通桥接备份恢复；正式微信已恢复ready、contacts/openChat可用。正式安装需另行升级。
+
+本轮按需加载已完成最终构建的真实HTTP／客户端／Raycast验收；不把它表述为100%头像覆盖或第二账号已验收。13组原生、22项Raycast、类型检查/lint/构建与传输回归通过。

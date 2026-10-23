@@ -40,7 +40,7 @@ static BOOL localHost(NSString *host) {
         && port.integerValue>0 && port.integerValue<=65535;
 }
 static BOOL hexNonce(NSString *value) {
-    return value.length==64 && [value rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location==NSNotFound;
+    return [value isKindOfClass:NSString.class] && value.length==64 && [value rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location==NSNotFound;
 }
 static BOOL allowedKeys(NSDictionary *values,NSArray *allowed) {
     for(NSString *key in values) if(![allowed containsObject:key]) return NO;
@@ -52,7 +52,7 @@ static WCTHTTPReply *nativeFailure(NSDictionary *result) {
     if(![code isKindOfClass:[NSString class]]) code=nil;
     NSDictionary *statuses=@{@"unsupported_build":@422,@"not_logged_in":@409,@"not_ready":@503,
         @"native_busy":@503,@"invalid_native_layout":@503,@"invalid_query":@400,
-        @"contact_not_found":@404,@"stale_session":@409,@"operation_timeout":@504};
+        @"avatar_not_found":@404,@"contact_not_found":@404,@"stale_session":@409,@"operation_timeout":@504};
     NSNumber *status=statuses[code?:@""];
     return error(status?status.integerValue:500,status?code:@"native_failed");
 }
@@ -100,7 +100,7 @@ WCTHTTPReply *WCTHandleHTTP(NSData *request, NSString *token,
     NSRange separator=[target rangeOfString:@"?"];
     NSString *path=separator.location==NSNotFound?target:[target substringToIndex:separator.location];
     BOOL health=[path isEqual:@"/health"];
-    if(!health && ![@[@"/wechat/search",@"/wechat/start"] containsObject:path]) return error(404,@"not_found");
+    if(!health && ![@[@"/wechat/search",@"/wechat/start",@"/wechat/avatar"] containsObject:path]) return error(404,@"not_found");
     if(!health && !sameSecret(headers[@"authorization"]?:@"",[@"Bearer " stringByAppendingString:token])) return error(401,@"unauthorized");
     NSMutableDictionary *query=[NSMutableDictionary dictionary];
     if(separator.location!=NSNotFound) {
@@ -145,6 +145,18 @@ WCTHTTPReply *WCTHandleHTTP(NSData *request, NSString *token,
         NSMutableDictionary *body=[@{@"ok":@YES,@"items":items} mutableCopy];
         for(NSString *key in @[@"session",@"source"]) if(result[key]) body[key]=result[key];
         return reply(200,body);
+    }
+    if([path isEqual:@"/wechat/avatar"]) {
+        NSString *identifier=query[@"id"],*epoch=query[@"epoch"];
+        if(!allowedKeys(query,@[@"id",@"epoch"]) || !identifier.length || !epoch.length ||
+           [identifier lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>1024 || [epoch lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>128 ||
+           [identifier rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location!=NSNotFound ||
+           [epoch rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location!=NSNotFound)return error(400,@"invalid_query");
+        result=operation(@"avatar",@{@"id":identifier,@"expectedSession":epoch},context);
+        if(![result isKindOfClass:NSDictionary.class] || ![result[@"ok"] isEqual:@YES])return nativeFailure(result);
+        if(![result[@"id"] isEqual:identifier] || ![result[@"session"] isEqual:epoch] || ![result[@"mime"] isEqual:@"image/png"] ||
+           ![result[@"data"] isKindOfClass:NSString.class] || ![result[@"data"] length] || [result[@"data"] length]>174764 || !hexNonce(result[@"digest"]))return error(500,@"invalid_native_response");
+        return reply(200,@{@"ok":@YES,@"id":identifier,@"session":epoch,@"mime":@"image/png",@"data":result[@"data"],@"digest":result[@"digest"]});
     }
     if(!allowedKeys(query,@[@"session",@"epoch"]) || ![query[@"session"] length] || ![query[@"epoch"] length] ||
        [query[@"session"] lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>1024 || [query[@"epoch"] length]>128) return error(400,@"invalid_query");

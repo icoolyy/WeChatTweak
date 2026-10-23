@@ -27,3 +27,14 @@ test("a history write failure does not misreport a confirmed chat as failed", as
     { addRecent: async () => { throw Error("storage unavailable"); } });
   assert.deepEqual(result, { historySaved: false });
 });
+
+test("contact avatars belong to the latest successful search session", async () => {
+  let epoch = "one";
+  const service = new ContactService({ search: async () => ({ session: epoch, source: "loadedContacts", items: [] }), open: async () => {}, avatar: async () => "image" });
+  const signal = new AbortController().signal;
+  await service.searchContacts("", signal);
+  const contact = { id: "id", arg: "id", title: "Name", subtitle: "", session: "one" };
+  assert.equal(await service.avatar(contact, signal), "image");
+  epoch = "two"; await service.searchContacts("", signal);
+  assert.equal(await service.avatar(contact, signal), undefined);
+});

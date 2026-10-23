@@ -8,6 +8,7 @@ static unsigned failures;
 static void check(BOOL condition, const char *name) {
     if (!condition) { ++failures; fprintf(stderr,"FAIL: %s\n",name); }
 }
+static void put32(unsigned char *p,uint32_t value){memcpy(p,&value,4);}
 static void put64(unsigned char *p, uint64_t value) { memcpy(p,&value,8); }
 static void short_string(unsigned char *p,const char *value) {
     size_t n=strlen(value); if(n>22) abort(); memset(p,0,24);memcpy(p,value,n);p[23]=(unsigned char)n;
@@ -25,7 +26,7 @@ int main(void) { @autoreleasepool {
     put64(nodeA,(uintptr_t)nodeB);short_string(nodeA+0x10,"wxid_a");put64(nodeA+0x28,(uintptr_t)recordA);
     short_string(nodeB+0x10,"wxid_b");put64(nodeB+0x28,(uintptr_t)recordB);
     short_string(recordA+8,"wxid_a");short_string(recordA+0x60,"备注甲");short_string(recordA+0xa8,"小甲");
-    short_string(recordB+8,"wxid_b");
+    short_string(recordB+8,"wxid_b");put32(recordA+0x54,3);put32(recordB+0x54,3);
     put64(recordB+0xa8,(uintptr_t)long_name);put64(recordB+0xb0,strlen(long_name));put64(recordB+0xb8,((uint64_t)1<<63)|sizeof(long_name));
     std::vector<Region> regions={{(uintptr_t)storage,sizeof(storage)}, {(uintptr_t)nodeA,sizeof(nodeA)},
         {(uintptr_t)nodeB,sizeof(nodeB)}, {(uintptr_t)recordA,sizeof(recordA)},
@@ -49,6 +50,28 @@ int main(void) { @autoreleasepool {
         check([result[0][@"id"] isEqual:@"wxid_a"] && [result[0][@"remark"] isEqual:@"备注甲"],"stable ID and Unicode remark");
         check([result[1][@"nickname"] isEqual:[NSString stringWithUTF8String:long_name]],"long string layout");
     }
+    put32(recordB+0x54,2);error=nil;
+    result=WCTReadContactCache((uintptr_t)storage,read,&error);
+    check(result.count==1 && !error,"historical nonfriend with delete_flag0 is excluded");
+    short_string(nodeB+0x10,"group@chatroom");short_string(recordB+8,"group@chatroom");error=nil;
+    result=WCTReadContactCache((uintptr_t)storage,read,&error);
+    check(result.count==2 && !error,"unsaved group is not mistaken for a removed friend");
+    short_string(nodeB+0x10,"filehelper");short_string(recordB+8,"filehelper");put32(recordB+0x54,0);error=nil;
+    result=WCTReadContactCache((uintptr_t)storage,read,&error);
+    check(result.count==2 && !error,"built-in file transfer remains available");
+    short_string(nodeB+0x10,"wxid_b");short_string(recordB+8,"wxid_b");put32(recordB+0x54,0x80000003);error=nil;
+    result=WCTReadContactCache((uintptr_t)storage,read,&error);
+    check(result.count==2 && !error,"other relation flags do not hide a current friend");put32(recordB+0x54,3);
+    uint32_t deleted=1,live=0;
+    memcpy(recordB+0x50,&deleted,4);error=nil;
+    result=WCTReadContactCache((uintptr_t)storage,read,&error);
+    check(result.count==1 && !error && [result[0][@"id"] isEqual:@"wxid_a"],"native deleted contact is excluded without a count mismatch");
+    memcpy(recordA+0x50,&deleted,4);error=nil;
+    result=WCTReadContactCache((uintptr_t)storage,read,&error);
+    check(result!=nil && result.count==0 && !error,"all tombstoned records form a valid empty snapshot");
+    short_string(recordB+8,"wrong_id");error=nil;
+    check(WCTReadContactCache((uintptr_t)storage,read,&error)==nil && error,"deleted record still validates ownership and structure");
+    short_string(recordB+8,"wxid_b");memcpy(recordA+0x50,&live,4);memcpy(recordB+0x50,&live,4);
     short_string(recordB+8,"wrong_id");
     error=nil;check(WCTReadContactCache((uintptr_t)storage,read,&error)==nil && error,"later invalid ID rejects entire snapshot");
     short_string(recordB+8,"wxid_b");

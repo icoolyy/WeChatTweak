@@ -59,7 +59,7 @@ NSArray<NSDictionary *> *WCTReadContactCache(uintptr_t storage, WCTReadMemory re
     NSArray *names=@[@"id",@"alias",@"remark",@"remarkPinyin",@"remarkInitials",@"nickname",@"nicknameInitials",@"nicknamePinyin"];
     const uintptr_t offsets[]={8,0x20,0x60,0x78,0x90,0xa8,0xc0,0xd8};
     while(memory.valid && node) {
-        if(contacts.count>=count || [seen containsObject:@(node)] || node>UINTPTR_MAX-0x38) {
+        if(seen.count>=count || [seen containsObject:@(node)] || node>UINTPTR_MAX-0x38) {
             memory.valid=false;break;
         }
         [seen addObject:@(node)];
@@ -73,10 +73,21 @@ NSArray<NSDictionary *> *WCTReadContactCache(uintptr_t storage, WCTReadMemory re
         }
         if(!memory.valid || !key.length || [key lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>1024 ||
            ![contact[@"id"] isEqual:key]) {memory.valid=false;break;}
-        [contacts addObject:[contact copy]];
+        // 269602 field binding 0x4844efc names +0x50 delete_flag. Native
+        // tombstones remain in the index after deletion; validate them above
+        // but never expose them as live searchable contacts.
+        uint32_t deleted=0;if(!memory.bytes(record+0x50,&deleted,sizeof(deleted)))break;
+        if(deleted>1){memory.valid=false;break;}
+        uint32_t flags=0;if(!memory.bytes(record+0x54,&flags,sizeof(flags)))break;
+        // The cache also holds historical/temporary users. 269602 uses bit0
+        // for a saved contact (native alias paths 0x435da1c/0x435f3d8), with
+        // local_type1/5 for saved contacts and type2 for temporary records.
+        // Keep chatrooms independently: unsaved groups also lack bit0.
+        BOOL current=(flags&1)!=0 || [key hasSuffix:@"@chatroom"] || [key isEqual:@"filehelper"];
+        if(!deleted && current)[contacts addObject:[contact copy]];
         node=memory.pointer(node);
     }
-    if(!memory.valid || contacts.count!=count) {
+    if(!memory.valid || seen.count!=count) {
         if(error) *error=[NSError errorWithDomain:@"WeChatTweak.Native" code:1
             userInfo:@{NSLocalizedDescriptionKey:@"Contact snapshot is unavailable or malformed."}];
         return nil;

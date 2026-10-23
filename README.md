@@ -11,7 +11,7 @@
 | 微信版本 | 已验证 App Store 微信 **4.1.13，build 269602** |
 | 架构 | 原生桥接仅支持 **Apple Silicon / arm64**；CLI 双架构构建不代表 Intel 微信已适配 |
 | Raycast 搜索与打开会话 | 已在真实微信副本及 Raycast 窗口验证，支持中文、备注、微信号和拼音 |
-| 联系人范围 | 微信已经加载的联系人缓存；每次搜索最多 100 条，不是完整联系人数据库 |
+| 联系人范围 | 微信已经加载的联系人缓存，过滤删除记录及非好友的历史个人资料；保留群聊与文件传输助手，每次搜索最多 100 条，不是完整联系人数据库 |
 | 置顶与最近联系人 | 支持最多 100 个置顶、最近 10 条；绑定当前桥接会话，世代变化后旧记录不显示 |
 | 备份、安装和恢复 | 整包备份、暂存写入、重签名、严格签名校验及恢复保护已验证 |
 | 防撤回、客户端多开 | 已配置对应字节补丁；真实消息和第二实例效果尚未验收 |
@@ -19,6 +19,46 @@
 | 其他微信构建、官网版、x86_64 | 未验证本次原生桥接兼容性 |
 
 重启及登录前后重新获取原生对象已验证；主动切换账号和长期运行的稳定性仍未完成实测。完整验证边界见 [兼容性记录](docs/compatibility.md)。
+
+## 0. 从克隆仓库开始
+
+首次配置按以下顺序进行：准备开发环境 → 克隆本分支 → 构建 CLI 和桥接 → 退出微信并安装 → 启动微信并登录 → 载入 Raycast 扩展 → 填写偏好 → 搜索验证。下面的命令均在 macOS 的普通终端执行，只有修改 `/Applications` 时使用 `sudo`。
+
+### 安装并检查前置环境
+
+1. 安装 Raycast，以及 App Store 微信 **4.1.13 / 269602**。在微信“关于”中核对版本；其他版本即使更高也不代表兼容，最终以本项目预检为准。
+2. 准备提供 Swift 6 和 macOS SDK 的 Xcode 开发环境，并完成 Xcode 的首次启动配置。未安装命令行工具时，可执行 `xcode-select --install`；如后续构建报告 `xcbuild` 或 SDK 缺失，检查是否选中了完整 Xcode 的开发目录。
+3. 安装 Node.js **22.6 或更新版本**（包含 npm）及 Python 3。可以使用自己已有的版本管理器；本项目不要求 Homebrew。
+
+检查终端实际使用的工具：
+
+```sh
+uname -m
+xcode-select -p
+xcrun --find swift
+swift --version
+clang++ --version
+git --version
+make --version
+python3 --version
+node --version
+npm --version
+```
+
+本项目的原生桥接要求 `uname -m` 为 `arm64`，避免从 Rosetta 终端构建和运行。Swift 应为 6.x，Node 至少为 22.6；工具缺失时先完成安装再继续。
+
+### 克隆并进入本项目分支
+
+以下使用 HTTPS 克隆，不需要提前配置 GitHub SSH 密钥：
+
+```sh
+git clone --branch hotfix/wechat-4.1.13-raycast --single-branch \
+  https://github.com/icoolyy/WeChatTweak.git
+cd WeChatTweak
+git branch --show-current
+```
+
+最后一条应输出 `hotfix/wechat-4.1.13-raycast`。仓库可以放在任意长期保留的目录；Raycast 会配置其中 CLI 的绝对路径，配置完成后移动仓库需要同步更新该路径。无需单独克隆 `raycast/upstream-wechat`，配套扩展已包含在本仓库中。
 
 ## 1. 准备环境和构建产物
 
@@ -42,6 +82,8 @@ dist/
 
 默认配置和桥接库从 CLI 所在目录读取，不依赖终端当前目录。不要用官方 `brew install` / `brew upgrade wechattweak` 代替本分支构建，也不要让旧 `wechattweak-cli` 的 `install/uninstall` 命令接管本项目安装。
 
+`dist/` 是本地生成目录，不随 Git 克隆提供。首次安装必须完成构建，不能直接引用其他机器上的临时路径。`make test` 包含 Swift 核心、CLI、原生桥接和回环通信测试；`make build` 默认生成双架构 CLI 与 arm64 桥接。构建失败时先解决报错，勿使用不完整的产物安装。
+
 本机开发曾遇到 CLT 接口、module map 和 `xcbuild` 问题，验证时使用过任务临时工具链绕过。该临时路径不是项目依赖，不能作为通用安装命令；详见 [工具链验证记录](docs/research/269602-native-compatibility.md#构建环境记录)。已有完整 `dist/` 的使用不需要这些临时文件。
 
 ## 2. 检查微信并安装桥接
@@ -51,8 +93,8 @@ dist/
 ```sh
 ./dist/wechattweak --version
 ./dist/wechattweak versions
-./dist/wechattweak doctor --json
-./dist/wechattweak patch --install-bridge --dry-run
+./dist/wechattweak doctor --app /Applications/WeChat.app --json
+./dist/wechattweak patch --app /Applications/WeChat.app --install-bridge --dry-run
 ```
 
 预检会校验微信构建、所有补丁目标、预期指令、原生业务代码指纹、桥接库架构和加载命令空间。未安装时，当前构建通常显示两个待写入位置及 `Bridge preflight passed: install/update required`。已安装时可以显示无需改动。若构建或字节不匹配，先排查，不改版本号强行跳过校验。
@@ -60,10 +102,12 @@ dist/
 **从微信菜单正常退出所有微信实例，包括此前用于测试的临时副本。** 然后在正常终端中安装：
 
 ```sh
-sudo ./dist/wechattweak patch --install-bridge
+sudo ./dist/wechattweak patch --app /Applications/WeChat.app --install-bridge
 ```
 
 默认 App Store 安装常需要管理员权限。如果当前用户对应用和相邻目录已有写权限，可以不加 `sudo`。诊断、启动微信和运行 Raycast 不需要 `sudo`。CLI 无法确认运行状态时会拒绝修改，请在正常终端执行。
+
+`sudo` 提示输入当前 Mac 用户的管理员密码时，终端不会显示输入字符。密码只在自己的终端输入；不要写进配置文件。点击微信窗口的关闭按钮不等于退出应用，请使用微信菜单的“退出微信”或 ⌘ Q。
 
 安装会：
 
@@ -133,6 +177,8 @@ npm --prefix raycast run dev
 
 `build` 只生成本地 `raycast/dist/`，不会自动安装到 Raycast；`dev` 才会载入本地开发扩展并监听代码变化。开发使用时保持该进程运行，需要重新载入时再次执行 `npm --prefix raycast run dev`，不需要每次重新安装微信桥接。
 
+最后一条是持续运行命令，保持这个终端窗口打开；后续终端检查可另开一个窗口并进入仓库根目录。请使用普通用户运行 npm 和 Raycast，避免生成属于 root 的依赖、缓存或凭证。
+
 在 Raycast 设置 → Extensions 中：
 
 1. 启用带本地开发标识的 **WeChat**。
@@ -154,7 +200,20 @@ npm --prefix raycast run dev
 printf '%s/dist/wechattweak\n' "$PWD"
 ```
 
+例如仓库位于 `/Users/你的用户名/Projects/WeChatTweak`，则 **WeChatTweak CLI Path** 填 `/Users/你的用户名/Projects/WeChatTweak/dist/wechattweak`。复制上面命令的实际输出，勿把 `$PWD`、`~`、引号或示例用户名原样填入偏好。其余三项首次使用通常留空；不需要手工创建或复制桥接凭证。
+
+### 首次配置验收
+
+1. 确认正式微信已经登录，仓库根目录执行 `./dist/wechattweak doctor --app /Applications/WeChat.app --json`，检查 `contactsBridgeAvailable` 为 `true`。
+2. 在 Raycast 运行本地开发版 **Manage WeChatTweak**，核对 CLI 路径、微信路径及运行桥接状态。Homebrew 未安装不影响这条本地安装流程。
+3. 运行 **Search Contacts and Chat**，搜索 `filehelper`，应能看到文件传输助手；再使用 Mac 微信中当前好友的昵称或备注搜索。
+4. 选择结果按 Enter，应切换到对应微信会话。此操作只打开会话，不会发送消息；头像可能稍后加载，失败时使用默认图标。
+
+若没有结果或出现错误，先参考下方常见问题。不要同时启用同名商店扩展，也不要再启动测试用微信副本。
+
 ## 5. 日常搜索和管理
+
+首次配置完成后，日常只需启动已安装桥接的 `/Applications/WeChat.app` 并登录，保持本地 Raycast 开发扩展已载入，再运行搜索命令。重新启动开发环境时，在仓库根目录运行 `npm --prefix raycast run dev`；无需每天重新构建、安装补丁或填写偏好。
 
 ### Search Contacts and Chat
 
@@ -168,7 +227,11 @@ printf '%s/dist/wechattweak\n' "$PWD"
 | 清除当前会话最近联系人 | ⌘ ⇧ X，确认后执行 |
 | 重新搜索 | ⌘ R |
 
-联系人界面使用默认头像。每次搜索最多返回 100 条已加载缓存记录；没有搜索到某人，不等于该联系人不存在。置顶上限 100 条，最近联系人保留 10 条，二者绑定当前已验证的桥接会话。微信重启或会话世代变化后旧记录不显示，需要重新搜索和置顶；不会直接复用旧扩展缺少会话身份的历史。
+真实头像按需加载已接入当前构建：先读取当前会话的内存缓存与受限本地头像文件，缺失时从微信原生头像记录取得图片地址，通过 HTTPS 向 `wx.qlogo.cn` 下载。个人与群聊共用这条路径，列表会在图片返回后自动显示，无需逐个打开微信会话。下载仅限当前搜索返回的联系人，最多 4 个并发，不携带桥接凭证、Cookie 或账号登录凭证，不读取聊天，不保存头像文件；来源缺失、下载失败或图片校验失败仍显示默认图标。可获取范围受微信提供的头像来源与远端可用性影响，不能保证所有联系人都有图片。
+
+图片统一转换为最多 128 像素、128 KiB 的 PNG；原始输入不超过 512 KiB。桥接和扩展各自在内存中最多缓存 64 张／4 MiB。桥接检测到微信会话变化后取消旧请求并清空缓存，搜索结果变化后取消已移除项的未完成下载；下载失败有约 30 秒冷却。临时微信的真实 HTTP + Raycast 客户端批量验收已取得 100 条中的 77 张（其余默认回退，接口错误 0），详细限制见 [头像适配记录](Native/Research/avatar_cache_269602.md)。该数字是抽样结果，不是固定覆盖率。
+
+**已有安装也需升级桥接库**：旧版桥接没有头像接口，仅更新 Raycast 源码不会显示真实头像。正常退出微信后，在仓库根目录按安装步骤执行 `sudo ./dist/wechattweak patch --app /Applications/WeChat.app --install-bridge`（使用刚构建的本分支 CLI 和同目录 dylib），保存新备份路径，再启动正式微信并登录。Raycast 从 `raycast/` 根目录执行 `npm run dev` 加载配套源码。每次搜索最多返回 100 条已加载缓存记录；没有搜索到某人，不等于该联系人不存在。置顶上限 100 条，最近联系人保留 10 条，二者绑定当前已验证的桥接会话。微信重启或会话世代变化后旧记录不显示，需要重新搜索和置顶；不会直接复用旧扩展缺少会话身份的历史。
 
 管理页会列出尚未开放的增强功能。2026-10-22 的临时副本测试已观察到同账号两进程的身份候选比较值一致，以及未登录时不可用；由于缺少第二账号及原生身份字段的完整证据，跨重启记录和持久快捷链接仍未开放。分页核心已通过自动化测试，但尚未接入搜索界面。进度和验收条件见[实施计划](docs/superpowers/plans/2026-10-22-contact-enhancements.md)，不要把研究代码或能力字段当作可用功能。
 
@@ -198,6 +261,7 @@ printf '%s/dist/wechattweak\n' "$PWD"
 | Homebrew 显示未安装 | 不影响直接使用本分支本地 CLI；检查 CLI Path 和桥接状态 |
 | 修改源码后 Raycast 没变化 | 确认 `npm --prefix raycast run dev` 正在运行，启用的是本地适配版而非旧商店版 |
 | 找不到联系人或列表不完整 | 仅搜索微信已加载的缓存，每次最多 100 条；尝试更精确的关键词 |
+| 搜到 Mac 微信通讯录中已不存在的个人联系人 | 旧桥接会返回缓存中的历史个人资料；构建并升级桥接库、重启微信后重新搜索。当前过滤不代表已验证所有群聊的成员状态，也不会主动从服务器同步通讯录 |
 | `Original bytes mismatch`、代码指纹不匹配、构建不支持 | 停止安装，核对微信渠道及构建号；不要手改配置版本或跳过校验 |
 | 安装提示微信仍在运行 | 正常退出所有实例和临时副本；在正常终端重试 |
 | Swift / SDK 编译错误 | 先确认 Swift 6 与所选 SDK 配套，参阅工具链验证记录；现有本分支产物可直接用于安装 |
@@ -241,6 +305,29 @@ sudo ./dist/wechattweak restore \
 微信升级可能替换已修改的应用及桥接。更新后先运行 `doctor --json` 和 `patch --install-bridge --dry-run`，只有当前构建重新通过预检才安装。本分支目前只验证上述构建；不能用旧备份覆盖已升级到不同构建的微信，CLI 会拒绝此类恢复。
 
 更新本项目后重新执行构建及验证，再按同一安装流程更新桥接，并重启微信。Raycast 依赖变化时在仓库根目录重新执行 `npm --prefix raycast ci`，之后载入开发扩展。
+
+对没有本地未提交改动的克隆，可按以下顺序更新。先停止旧的 Raycast 开发进程（对应终端按 Ctrl C），再执行：
+
+```sh
+git pull --ff-only origin hotfix/wechat-4.1.13-raycast
+make test
+make build
+npm --prefix raycast ci
+npm --prefix raycast test
+npm --prefix raycast run typecheck
+npm --prefix raycast run lint
+npm --prefix raycast run build
+./dist/wechattweak patch --app /Applications/WeChat.app --install-bridge --dry-run
+```
+
+以上全部成功后，正常退出微信，再执行：
+
+```sh
+sudo ./dist/wechattweak patch --app /Applications/WeChat.app --install-bridge
+open /Applications/WeChat.app
+```
+
+保存本次备份路径，完成登录，然后执行 `npm --prefix raycast run dev` 重新载入扩展，并按首次验收步骤检查。仅执行 `git pull` 或重载 Raycast 不会更新已经安装到微信内的桥接库。若有本地改动或 `git pull --ff-only` 拒绝更新，先整理自己的改动和分支，不要通过强制重置覆盖。
 
 ### 自定义应用、备份和配置
 

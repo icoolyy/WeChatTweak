@@ -1,6 +1,6 @@
 // Derived from upstream-wechat; upstream MIT notice is in LICENSE.upstream.
-import { Action, ActionPanel, closeMainWindow, environment, Icon, List, showToast, Toast } from "@raycast/api";
-import { useRef, useState } from "react";
+import { Action, ActionPanel, closeMainWindow, environment, Icon, Image, List, showToast, Toast } from "@raycast/api";
+import { useEffect, useRef, useState } from "react";
 import path from "node:path";
 import { storageService } from "../services/runtime.ts";
 import type { ContactService } from "../services/contactService.ts";
@@ -11,6 +11,17 @@ interface Props { searchResult: SearchResult; isPinned: boolean; service: Contac
 export function SearchListItem({ searchResult, isPinned, service, onTogglePin, onClearHistory, onRefresh }: Props) {
   const [opening, setOpening] = useState(false);
   const inFlight = useRef(false);
+  const [avatar, setAvatar] = useState<{ id: string; session: string; source: string }>();
+  const { id, session } = searchResult;
+  useEffect(() => {
+    const controller = new AbortController(); let active = true;
+    setAvatar(undefined);
+    void service.avatar({ ...searchResult, id, session }, controller.signal).then((source) => {
+      if (active && source) setAvatar({ id, session, source });
+    });
+    return () => { active = false; controller.abort(); };
+  }, [id, session, service]);
+  const avatarSource = avatar?.id === id && avatar.session === session ? avatar.source : undefined;
   async function startWeChat() {
     if (inFlight.current) return;
     inFlight.current = true; setOpening(true);
@@ -26,7 +37,7 @@ export function SearchListItem({ searchResult, isPinned, service, onTogglePin, o
   }
   return <List.Item title={searchResult.title || searchResult.subtitle || searchResult.arg} subtitle={searchResult.subtitle}
       accessories={[{ text: searchResult.arg, icon: isPinned ? Icon.Pin : undefined }]}
-      icon={path.join(environment.assetsPath, "avatar.png")} actions={<ActionPanel>
+      icon={{ source: avatarSource ?? path.join(environment.assetsPath, "avatar.png"), fallback: "avatar.png", mask: Image.Mask.RoundedRectangle }} actions={<ActionPanel>
         <ActionPanel.Section>
           <Action icon={Icon.Message} title={opening ? "正在打开会话" : "打开微信会话"} onAction={startWeChat} />
           <Action.CopyToClipboard icon={Icon.Clipboard} title="复制微信号" content={searchResult.arg} shortcut={{ modifiers: ["cmd"], key: "c" }} />

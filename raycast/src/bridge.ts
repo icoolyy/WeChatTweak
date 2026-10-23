@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { request } from "node:http";
 
 export interface Contact { id: string; arg: string; title: string; subtitle?: string }
@@ -27,6 +27,10 @@ function text(value: unknown, max = 4096): value is string {
   return typeof value === "string" && Buffer.byteLength(value) <= max;
 }
 
+class BridgeError extends Error {
+  code: string;
+  constructor(code: string) { super(messages[code] ?? "微信桥接请求失败，请运行兼容性诊断"); this.code = code; }
+}
 export class BridgeClient {
   private readonly credential: string;
   private readonly port: number;
@@ -68,7 +72,7 @@ export class BridgeClient {
             if (!object(value)) throw new Error("桥接响应无效");
             if (response.statusCode !== 200) {
               const code = object(value.error) && typeof value.error.code === "string" ? value.error.code : "";
-              throw new Error(messages[code] ?? "微信桥接请求失败，请运行兼容性诊断");
+              throw new BridgeError(code);
             }
             resolve(value);
           } catch (error) { reject(error); }
@@ -113,6 +117,23 @@ export class BridgeClient {
       return { id: item.id, arg: item.id, title: item.title, subtitle: item.subtitle as string | undefined };
     });
     return { items, session: value.session, source: value.source };
+  }
+  async avatar(id: string, session: string, signal?: AbortSignal): Promise<string | undefined> {
+    const { token, health } = await this.verified(signal);
+    if (health.session !== session) throw new Error(messages.stale_session);
+    if (!health.capabilities.avatars) return undefined;
+    let value: Record<string, unknown>;
+    try { value = await this.json(`/wechat/avatar?${new URLSearchParams({ id, epoch: session })}`, token, signal); }
+    catch (error) { if (error instanceof BridgeError && error.code === "avatar_not_found") return undefined; throw error; }
+    if (value.ok !== true || value.id !== id || value.session !== session || value.mime !== "image/png" ||
+      !text(value.data, 174764) || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value.data) ||
+      !text(value.digest, 64) || !/^[0-9a-f]{64}$/.test(value.digest)) throw new Error("头像响应无效");
+    const bytes = Buffer.from(value.data, "base64");
+    if (bytes.length < 33 || bytes.length > 128 * 1024 || bytes.toString("base64") !== value.data ||
+      !bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")) || bytes.toString("ascii", 12, 16) !== "IHDR" ||
+      !bytes.readUInt32BE(16) || !bytes.readUInt32BE(20) || bytes.readUInt32BE(16) > 128 || bytes.readUInt32BE(20) > 128 ||
+      createHash("sha256").update(bytes).digest("hex") !== value.digest) throw new Error("头像响应无效");
+    return `data:image/png;base64,${value.data}`;
   }
   async open(id: string, session: string, signal?: AbortSignal): Promise<void> {
     const { token, health } = await this.verified(signal);

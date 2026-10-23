@@ -30,6 +30,9 @@ int main(void) { @autoreleasepool {
     check(code(decode(wct_native_request_open_json("")),@"invalid_query"),"empty contact ID rejected");
     check(code(decode(wct_native_request_open_json("filehelper")),@"unsupported_build"),"open fails closed without target");
     check(wct_native_selected_id()==NULL,"no stale selected ID without target");
+    check(code(decode(wct_native_avatar_json("filehelper","epoch")),@"unsupported_build"),"avatar fails closed without target");
+    check(code(decode(wct_native_avatar_json(NULL,"epoch")),@"invalid_query"),"avatar rejects missing contact");
+    check(code(decode(wct_native_avatar_json("filehelper","")),@"invalid_query"),"avatar requires epoch");
     dispatch_semaphore_t done=dispatch_semaphore_create(0);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{ @autoreleasepool {
         check(code(decode(wct_native_search_json("",1,1)),@"wrong_thread"),"off-main search rejected");

@@ -15,6 +15,11 @@ int main(int argc,char **argv) { @autoreleasepool {
     WCTBridgeOperation fixture=^NSDictionary*(NSString *operation,NSDictionary *arguments,WCTOperationContext *context) {
         if([operation isEqual:@"health"]) return @{@"state":@"ready",@"build":@"269602",@"session":epoch,
             @"contactsSource":@"loadedContacts",@"capabilities":@{@"contacts":@YES,@"openChat":@YES}};
+        if([operation isEqual:@"avatar"]) {
+            if(![arguments[@"expectedSession"] isEqual:epoch])return @{@"error":@{@"code":@"stale_session"}};
+            if(![arguments[@"id"] isEqual:@"fixture_0"])return @{@"error":@{@"code":@"avatar_not_found"}};
+            return @{@"ok":@YES,@"id":@"fixture_0",@"session":epoch,@"mime":@"image/png",@"data":@"aGVsbG8=",@"digest":[@"a" stringByPaddingToLength:64 withString:@"a" startingAtIndex:0]};
+        }
         if([operation isEqual:@"open"]) {
             if(![arguments[@"expectedSession"] isEqual:epoch]) return @{@"error":@{@"code":@"stale_session"}};
             return @{@"ok":@YES,@"confirmed":@YES};

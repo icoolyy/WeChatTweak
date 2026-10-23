@@ -41,3 +41,7 @@ Raycast 设置中启用带本地开发标识的 WeChat，停用旧商店 WeChat�
 只读预检调用 `patch --install-bridge --dry-run`；安装调用 `patch --install-bridge`；恢复调用 `restore --backup <准确路径>`。安装和恢复都需要确认，取消不执行命令。不会自动安装官方2.0.1或强制终止微信；先正常退出全部微信实例。权限不足时使用页面提供的终端命令，在正常终端中完成 sudo 验证。
 
 完整安装与恢复见 [项目安装说明](../docs/installation.md)。本轮真实 UI 验证包括中文、拼音、置顶/取消、确认打开后的最近联系人、管理状态、只读预检以及取消安装；未发送消息、未修改原微信安装。
+
+真实头像支持当前搜索结果的内存缓存、受限本地缓存和 `wx.qlogo.cn` HTTPS 按需补齐。最多 4 个解析／下载任务，图片返回后自动显示；缺失或失败仍回退默认图标，不保存头像文件，不携带桥接凭证或微信登录凭证。要求同步升级本项目桥接库，安装与验收限制见仓库根 [README](../README.md) 和 [头像记录](../Native/Research/avatar_cache_269602.md)。
+
+已登录支持的微信后，可从 `raycast/` 执行 `node --experimental-strip-types tools/verifyAvatars.ts` 重跑当前搜索结果的真实头像验收。该命令会按需请求头像，只打印数量与耗时，不打印联系人、图片地址或内容。
